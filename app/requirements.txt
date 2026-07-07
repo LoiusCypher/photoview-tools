@@ -1,0 +1,188 @@
+# absl-py==2.4.0
+# astunparse==1.6.3
+# backcall==0.2.0
+# certifi==2026.6.17
+# cffi==2.0.0
+# charset-normalizer==3.4.7
+# contourpy==1.3.2
+# cryptography==49.0.0
+# cycler==0.12.1
+# Cython==3.0.5
+# decorator==5.3.1
+# flatbuffers==25.12.19
+# fonttools==4.63.0
+# gast==0.7.0
+# google-auth==2.55.1
+# google-auth-oauthlib==1.0.0
+# google-pasta==0.2.0
+# gpg==1.21.0
+# greenlet==3.5.3
+# grpcio==1.81.1
+# h5py==3.9.0
+# idna==3.18
+# ImageIO==2.37.3
+# imgaug==0.4.0
+# ipython==7.34.0
+# ipython-genutils==0.2.0
+# ipython-sql==0.5.0
+# jedi==0.20.0
+# keras==2.14.0
+# kiwisolver==1.5.0
+# lazy-loader==0.5
+# libclang==18.1.1
+# libcomps==0.1.19
+# Markdown==3.10.2
+# MarkupSafe==3.0.3
+# matplotlib==3.7.1
+# matplotlib-inline==0.2.2
+# ml-dtypes==0.2.0
+# networkx==3.6.1
+# numpy==1.23.5
+# oauthlib==3.3.1
+# opencv-contrib-python==4.8.0.76
+# opencv-python==4.8.0.76
+# opt_einsum==3.4.0
+# packaging==26.2
+# parso==0.8.7
+# pexpect==4.9.0
+# pickleshare==0.7.5
+# Pillow==9.4.0
+# prettytable==3.18.0
+# prompt_toolkit==3.0.52
+# protobuf==4.25.9
+# ptyprocess==0.7.0
+# pyasn1==0.6.3
+# pyasn1_modules==0.4.2
+# pycocotools==2.0.11
+# pycparser==3.0
+# Pygments==2.20.0
+# pyparsing==3.3.2
+# python-dateutil==2.9.0.post0
+# requests==2.34.2
+# requests-oauthlib==2.0.0
+# rpm==4.18.2
+# scikit-image==0.23.2
+# scipy==1.11.3
+# shapely==2.1.2
+# six==1.17.0
+# SQLAlchemy==2.0.51
+# sqlparse==0.5.5
+# tensorboard==2.14.1
+# tensorboard-data-server==0.7.2
+# tensorflow==2.14.0
+# tensorflow-cpu-aws==2.14.0
+# tensorflow-estimator==2.14.0
+# tensorflow-io-gcs-filesystem==0.37.1
+# termcolor==3.3.0
+# tifffile==2026.3.3
+# traitlets==5.15.1
+# typing_extensions==4.15.0
+# urllib3==2.7.0
+# wcwidth==0.8.2
+# Werkzeug==3.1.8
+# wrapt==1.14.2
+
+                                         # orig unnecessary cython==3.0.5
+h5py>=3.16.0              # newest works # orig             h5py==3.9.0
+imaug>=0.4.2              # newest works # orig unsupported imgaug==0.4.0
+ipython>=9.15.0           # newest works # orig             ipython==7.34.0
+                                         # orig unnecessary ipython-genutils==0.2.0
+                                         # orig unnecessary ipython-sql==0.5.0
+# keras==2.15.0           #        works # orig same as tf  keras==2.14.0
+# matplotlib==3.11.0      # newest works # orig             matplotlib==3.7.1
+# numpy==1.26.4           #        works # orig             #numpy==1.23.5
+                                         # orig unnecessary opencv-contrib-python==4.8.0.76
+# opencv-python==4.8.0.86 #        works # orig             opencv-python==4.8.0.76
+# pillow==12.3.0          #        works # orig             pillow==9.4.0
+pycocotools>=2.0.11       # newest works orig
+# scikit-image==0.26.0    #        works # orig             scikit-image==0.19.3
+# scipy==1.17.1           #              # orig             scipy==1.11.3
+# tensorboard==2.15.2     #        works # orig             tensorboard==2.14.1
+tensorflow==2.15.1        #        works # orig             tensorflow==2.14.0
+mariadb>=1.1.14
+
+# absl-py==2.4.0
+# asttokens==3.0.1
+# astunparse==1.6.3
+# certifi==2026.6.17
+# cffi==2.0.0
+# charset-normalizer==3.4.7
+# contourpy==1.3.3
+# cryptography==49.0.0
+# cycler==0.12.1
+# decorator==5.3.1
+# executing==2.2.1
+# flatbuffers==25.12.19
+# fonttools==4.63.0
+# gast==0.7.0
+# google-auth==2.55.1
+# google-auth-oauthlib==1.4.0
+# google-pasta==0.2.0
+# gpg==1.21.0
+# grpcio==1.81.1
+# h5py==3.16.0
+# idna==3.18
+# imagecorruptions-imaug==1.1.4
+# ImageIO==2.37.3
+# imaug==0.4.2
+# ipython==9.15.0
+# ipython_pygments_lexers==1.1.1
+# jedi==0.20.0
+# keras==2.15.0
+# kiwisolver==1.5.0
+# lazy-loader==0.5
+# libclang==18.1.1
+# libcomps==0.1.19
+# llvmlite==0.48.0
+# Markdown==3.10.2
+# MarkupSafe==3.0.3
+# matplotlib==3.11.0
+# matplotlib-inline==0.2.2
+# ml-dtypes==0.3.2
+# networkx==3.6.1
+# numba==0.66.0
+# numpy==1.26.4
+# oauthlib==3.3.1
+# opencv-python==4.11.0.86
+# opencv-python-headless==4.11.0.86
+# opt_einsum==3.4.0
+# packaging==26.2
+# parso==0.8.7
+# pexpect==4.9.0
+# pillow==12.3.0
+# prompt_toolkit==3.0.52
+# protobuf==4.25.9
+# psutil==7.2.2
+# ptyprocess==0.7.0
+# pure_eval==0.2.3
+# pyasn1==0.6.3
+# pyasn1_modules==0.4.2
+# pycocotools==2.0.11
+# pycparser==3.0
+# Pygments==2.20.0
+# pyparsing==3.1.1
+# python-dateutil==2.9.0.post0
+# requests==2.34.2
+# requests-oauthlib==2.0.0
+# rpm==4.18.2
+# scikit-image==0.26.0
+# scipy==1.17.1
+# shapely==2.1.2
+# six==1.17.0
+# stack-data==0.6.3
+# tensorboard==2.15.2
+# tensorboard-data-server==0.7.2
+# tensorflow==2.15.1
+# tensorflow-cpu-aws==2.15.1
+# tensorflow-estimator==2.15.0
+# tensorflow-io-gcs-filesystem==0.37.1
+# termcolor==3.3.0
+# tifffile==2026.3.3
+# traitlets==5.15.1
+# typing_extensions==4.16.0
+# urllib3==2.7.0
+# wcwidth==0.8.2
+# Werkzeug==3.1.8
+# wrapt==1.14.2
+# 
+imagecodecs
