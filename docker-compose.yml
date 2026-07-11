@@ -8,7 +8,7 @@ services:
     command: python3 /app/ScanPhotoviewWithMaskRCNN.py
     hostname: photoview-objectdetector
     container_name: photoview-objectdetector
-    restart: unless-stopped
+    restart: no # unless-stopped
     ports:
       - "80:80"
     environment:
@@ -22,4 +22,10 @@ services:
       - "${HOST_PHOTOVIEW_LOCATION}/storage:/home/photoview/media-cache"
       - "${HOST_PHOTOVIEW_MEDIA_ROOT}:/photos:ro"
       - "${HOST_PHOTOVIEW_LOCATION}/storage:/home/photoview/media-cache"
+      - "/home/helmut/docker/photoview-tools/data/handwriting/orig:/handwriting/orig:ro"
+      - "/home/helmut/docker/photoview-tools/data/handwriting/generated:/handwriting/generated:rw"
+      - "/home/helmut/docker/photoview-tools/logs:/Mask-RCNN_model/logs:rw"
+      - "/home/helmut/docker/photoview-tools/Mask-RCNN_TF2.14.0:/Mask-RCNN_model:rw"
+#      - "./handwriting/generated:/handwriting/generated:rw"
+# LAV/LAV_NRW--Abt_Rheinland--PA_3103--29568/*.json
 

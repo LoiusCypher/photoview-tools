@@ -13,7 +13,7 @@ RUN dnf update -y \
     && rm -rf /var/cache/dnf \
     && echo Done
 
-RUN git clone https://github.com/z-mahmud22/Mask-RCNN_TF2.14.0.git /Mask-RCNN_model
+RUN git clone https://github.com/LoiusCypher/Mask-RCNN_TF2.14.0.git /Mask-RCNN_model
 RUN sed -i -e "s:np\.bool:bool:g" /Mask-RCNN_model/mrcnn/utils.py
 COPY app /app
 WORKDIR /app

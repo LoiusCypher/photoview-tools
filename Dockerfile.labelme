@@ -1,0 +1,58 @@
+#FROM wkentaro/labelme AS labelme.local
+FROM python:3.12-trixie AS labelme.local
+
+RUN apt update
+RUN apt upgrade -y
+RUN apt install -y qtwayland5
+RUN apt install -y xdg-utils
+RUN apt install -y dbus-x11
+RUN pip3 install --upgrade pip
+RUN pip3 install hatch
+
+ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+ENV XDG_SESSION_TYPE=wayland
+ENV WAYLAND_DISPLAY=wayland-0
+ENV QT_WAYLAND_SHELL_INTEGRATION=xdg-shell
+ENV QT_QPA_PLATFORM=wayland
+
+RUN mkdir -p $XDG_RUNTIME_DIR
+WORKDIR /app
+RUN git clone https://github.com/wkentaro/labelme.git /app
+RUN hatch build -t wheel labelme
+RUN pip3 install labelme/labelme-7.0.3.dev2+gc4e8bd42b-py3-none-any.whl
+#ENTRYPOINT hatch run labelme
+ENTRYPOINT labelme
+
+ENV RUN_OPT_BASE="--json --image /app/examples/semantic_segmentation/data_dataset_voc/JPEGImages/2011_000006.jpg"
+ENV RUN_OPT_TEXT="{\"texts\": [\"cat\"]}"
+ENV RUN_OPT_REGION="{\"points\": [[1439, 504], [1439, 1289]], \"point_labels\": [1, 1]}"
+# AI-Assisted Sam3                    & AI Text-to SAM3 (smart)
+RUN osam run sam3              --prompt "$RUN_OPT_TEXT" $RUN_OPT_BASE > sam3.txt
+#                                     & AI Text-to YOLO-World (fast)
+###RUN osam run yoloworld         --prompt "$RUN_OPT_TEXT" $RUN_OPT_BASE
+# AI-Assisted Sam2 (accuracy)         & 
+RUN echo                       --prompt "$RUN_OPT_REGION"
+RUN osam run sam2              --prompt "$RUN_OPT_REGION" $RUN_OPT_BASE > sam2.txt
+# AI-Assisted Sam2 (balanced)         & 
+##RUN osam run sam2:small        --prompt "$RUN_OPT_REGION"$RUN_OPT_BASE 
+# AI-Assisted Sam2 (speed)            & 
+
+# AI-Assisted Sam (accuracy)
+RUN osam run sam               $RUN_OPT_BASE > sam.txt
+# AI-Assisted Sam (balanced)
+##RUN osam run sam:300m          $RUN_OPT_BASE 
+# AI-Assisted Sam (speed)
+##RUN osam run sam:100m          $RUN_OPT_BASE 
+# AI-Assisted EfficientSam (accuracy)
+##RUN osam run efficientsam      $RUN_OPT_BASE 
+# AI-Assisted EfficientSam (speed)
+RUN osam run efficientsam:10m  $RUN_OPT_BASE 
+# docker run -it
+#	 -v $(pwd):/root/workdir
+#	 --volume="/run/user/1000/$WAYLAND_DISPLAY:/tmp/runtime-root/$WAYLAND_DISPLAY:rw"
+##	 --volume="$HOME/.Xauthority:/root/.Xauthority:rw"
+##	 -e "XDG_RUNTIME_DIR=/tmp/runtime-root"
+##	 -e "WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
+##	 -e "XDG_SESSION_TYPE=wayland"
+#	 --privileged
+#	 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

@@ -89,6 +89,7 @@ ipython>=9.15.0           # newest works # orig             ipython==7.34.0
                                          # orig unnecessary ipython-genutils==0.2.0
                                          # orig unnecessary ipython-sql==0.5.0
 # keras==2.15.0           #        works # orig same as tf  keras==2.14.0
+keras>=3.15.0           #        works # orig same as tf  keras==2.14.0
 # matplotlib==3.11.0      # newest works # orig             matplotlib==3.7.1
 # numpy==1.26.4           #        works # orig             #numpy==1.23.5
                                          # orig unnecessary opencv-contrib-python==4.8.0.76
@@ -98,8 +99,11 @@ pycocotools>=2.0.11       # newest works orig
 # scikit-image==0.26.0    #        works # orig             scikit-image==0.19.3
 # scipy==1.17.1           #              # orig             scipy==1.11.3
 # tensorboard==2.15.2     #        works # orig             tensorboard==2.14.1
-tensorflow==2.15.1        #        works # orig             tensorflow==2.14.0
-mariadb>=1.1.14
+#tensorflow==2.15.1        #        works # orig             tensorflow==2.14.0
+tensorflow>=2.20.0        #        works # orig             tensorflow==2.14.0
+torch>=2.13.0+cpu
+torchvision>=0.28.0+cpu
+mariadb>=1.1.14           #        works #
 
 # absl-py==2.4.0
 # asttokens==3.0.1
