@@ -226,19 +226,19 @@ dataset_iter = DataLoader(
     collate_fn=coco_collate_fn
 )
 
-if False:
-        images, first = next( dataset_iter)
-        print('iter images.shape',len(images),'len(first)',len(first))
+if True:
+        images, targets = next( dataset_iter)
+        print('iter images.shape',len(images),'len(targets)',len(targets))
         print('iter images[0].shape',images[0].shape)
         print('iter images[0].shape[-2:]',images[0].shape[-2:])
-        #first = next(dataset_iter)
-        print('iter len(first)',len(first))
-        #print(first[0].keys())
-        #print('iter first[0]',first[0])
-        print('iter len(first[0])',len(first[0]))
-        #print(first[0][0])
+        #images, targets = next(dataset_iter)
+        print('iter len(targets)',len(targets))
+        #print(targets[0].keys())
+        #print('iter targets[0]',targets[0])
+        print('iter len(targets[0])',len(targets[0]))
+        #print(targets[0][0])
         #print()
-        #print(first[1][0].keys())
+        #print(targets[1][0].keys())
         print()
 
 ######## COCO 1 ================
@@ -260,9 +260,9 @@ if False:
 
 batches_cnt = 1 + (len(coco_set) - 1) // batch_size
 
-for i, (images, first) in enumerate( dataset_iter):
-    #print('Batch Loop', i, images, first)
-    #print('Batch Loop', i, len(images), len(first))
+for i, (images, targets) in enumerate( dataset_iter):
+    #print('Batch Loop', i, images, targets)
+    #print('Batch Loop', i, len(images), len(targets))
     #print('shape', images[0].shape)
     results = model( images)
     print('batch loop', i + 1, '/', batches_cnt, ':', len(results), results[0].keys())
