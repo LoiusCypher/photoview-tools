@@ -56,7 +56,13 @@ import shutil
 We use the [Caltech 101 Dataset](https://data.caltech.edu/records/mzrjq-6wc02).
 """
 
-##############################################################################
+
+"""
+## Implement the patch creation layer
+"""
+
+import numpy as np
+
 
 """
 ## Implement the patch encoding layer
@@ -100,12 +106,6 @@ class PatchEncoder(layers.Layer):
         )
         return config
 
-"""
-## Implement the patch creation layer
-"""
-
-import numpy as np
-
 class Patches(layers.Layer):
     def __init__(self, patch_size):
         super().__init__()
@@ -121,11 +121,6 @@ class Patches(layers.Layer):
         num_patches_h = height // self.patch_size
         num_patches_w = width // self.patch_size
         patches = keras.ops.image.extract_patches(images, size=self.patch_size)
-        #patches = tf.image.extract_patches(images=images,
-                                            #sizes=[1, self.patch_size, self.patch_size, 1],
-                                            #strides=[1, 1, 1, 1],
-                                            #rates=[1, 1, 1, 1],
-                                            #padding='VALID')
         #patches = ops.reshape(
         patches = np.reshape(
             patches,
@@ -141,7 +136,6 @@ class Patches(layers.Layer):
         config = super().get_config()
         config.update({"patch_size": self.patch_size})
         return config
-
 
 """
 ## Implement multilayer-perceptron (MLP)
@@ -228,82 +222,6 @@ sys.path.append(OBJECT_DETECTOR_ROOT_DIR)  # To find local version of the librar
 from mrcnn import utils
 #from mrcnn.utils import Dataset
 
-class AirplaneDataset(utils.Dataset):
-    # load the dataset definitions
-    def load_dataset2(self, path_images, path_annot, is_train=True):
-        self.add_class("dataset", 1, "Airplane")
-        image_paths = [ f for f in os.listdir(path_images) if os.path.isfile(os.path.join(path_images, f)) ]
-        image_paths.sort()
-        annot_paths = [ f for f in os.listdir(path_annot) if os.path.isfile(os.path.join(path_annot, f)) ]
-        annot_paths.sort()
-        # loop over the annotations and images, preprocess them and store in lists
-        for i in range(0, len(annot_paths)):
-            image = keras.utils.load_img( path_images + image_paths[i],)
-            w, h = image.size[:2]
-
-            #print(f"Loop {i} {path_annot + annot_paths[i]}")
-            targets = []
-            # Access bounding box coordinates
-            for annot in scipy.io.loadmat(path_annot + annot_paths[i])["box_coord"]:
-                #print(f"annot {annot}")
-
-                box = [ round(image_size*(float(coord) / w)) for coord in annot ]
-
-                if (box[1] - box[0] > 3) and (box[3] - box[2] > 3):
-                    # apply relative scaling to bounding boxes as per given image and append to list
-                    targets.append( box )
-                    print(f"box {box[0]}:{box[2]} {box[1]}:{box[3]}")
-
-            if len( targets) > 0:
-                #print(f"Loop {i} {path_annot + annot_paths[i]} {path_images + image_paths[i]}")
-                # resize images # convert image to array and append to list
-                img = keras.utils.img_to_array(image.resize((image_size, image_size)))
-
-                self.add_image( 'dataset', image_id=id, image=img, annotation=targets, path=path_images + image_paths[i])
-                print(f"Annot {i} done")
-
-
-    # load the masks for an image
-    def load_mask(self, image_id):
-        info = self.image_info[image_id]
-        boxes = info['annotation']
-        print(f"shape {info['image'].shape}")
-        w, h, c = info['image'].shape
-        masks = np.zeros([h, w, len(boxes)], dtype='uint8')
-        #print(f"annotation {info['annotation']}")
-        class_ids = list()
-        for i, box in enumerate( boxes):
-            masks[box[1]:box[3], box[0]:box[2], i] = 1
-            class_ids.append(self.class_names.index('Airplane'))
-            xs = box[0]
-            xe = box[2]
-            ys = box[1]
-            ye = box[3]
-            print(f"box {masks.shape} {i} {xs}:{xe} {ys}:{ye}")
-        #masks[ys:ye, xs:xe, i] = 1
-        #class_ids.append(self.class_names.index('Airplane'))
-        return masks, np.asarray(class_ids, dtype='int32')
- 
-    # load an image reference
-    def load_image(self, image_id):
-        info = self.image_info[image_id]
-        return info['image']
-
-    # load an image reference
-    def get_batches(self):
-        batch_size = 2
-        images = list ()
-        masks = list ()
-        print(f"batch start {len(self.image_ids)}")
-        for batch_idx in range(0, len(self.image_ids), batch_size):
-            #images = np.zeros([len(self.image_ids), self.load_image(batch_idx).shape])
-            images = np.array([self.load_image( id) for id in self.image_ids[ batch_idx:batch_idx+batch_size]])
-            for i, id in enumerate(self.image_ids[ batch_idx:batch_idx+batch_size]):
-                #images[i] = self.load_image( id)
-                masks.append( self.load_mask( id))
-            print(f"batch {batch_idx} {len(images)} {images.shape}")
-            yield  batch_idx, images, masks
-
 def run_experiment(model, learning_rate, weight_decay, batch_size, num_epochs):
     optimizer = keras.optimizers.AdamW(
         learning_rate=learning_rate, weight_decay=weight_decay
@@ -329,47 +247,53 @@ def run_experiment(model, learning_rate, weight_decay, batch_size, num_epochs):
     epochs = num_epochs  # In practice you need at least 20 epochs to generate nice digits.
     save_dir = "vit_object_detector.weights.h5"
 
-    for epoch in range(epochs):
-        print("\nStart epoch", epoch)
+    run_own_loop = False
+    if run_own_loop:
+        for epoch in range(epochs):
+            print("\nStart epoch", epoch)
 
-        #for step, real_images in enumerate(dataset):
-        for step, real_images, classed_masks in airplane_set.get_batches():
-            # Train the discriminator & generator on one batch of real images.
-            d_loss, g_loss, boxes = model.train_step(real_images)
-            print(f'training output')
+            #for step, real_images in enumerate(dataset):
+            for step, real_images, classed_masks in airplane_set.get_batches(batch_size):
+                # Train the discriminator & generator on one batch of real images.
+                d_loss, g_loss, boxes = model.train_step(real_images)
+                print(f'training output')
 
-            # Logging.
-            #if step % 200 == 0:
-            if step % 5 == 0:
-                # Print metrics
-                print("discriminator loss at step %d: %.2f" % (step, d_loss))
-                print("adversarial loss at step %d: %.2f" % (step, g_loss))
+                # Logging.
+                #if step % 200 == 0:
+                if step % 5 == 0:
+                    # Print metrics
+                    print("discriminator loss at step %d: %.2f" % (step, d_loss))
+                    print("adversarial loss at step %d: %.2f" % (step, g_loss))
 
-                # Save one generated image
-                img = keras.utils.array_to_img(generated_images[0] * 255.0, scale=False)
-                img.save(os.path.join(save_dir, "generated_img" + str(step) + ".png"))
+                    # Save one generated image
+                    img = keras.utils.array_to_img(generated_images[0] * 255.0, scale=False)
+                    img.save(os.path.join(save_dir, "generated_img" + str(step) + ".png"))
 
-            # To limit execution time we stop after 10 steps.
-            # Remove the lines below to actually train the model!
-            if step > 10:
-                break
+                # To limit execution time we stop after 10 steps.
+                # Remove the lines below to actually train the model!
+                if step > 10:
+                    break
 
-    # Regular model fit
-    #history = model.fit(
-        #x=x_train,
-        #y=y_train,
-        #batch_size=batch_size,
-        #epochs=num_epochs,
-        #validation_split=0.1,
-        #callbacks=[
-            #checkpoint_callback,
-            #keras.callbacks.EarlyStopping(monitor="val_loss", patience=10),
-        #],
-        #verbose=2,
-    #)
-    print(f"-model fit done")
+    else:
+        # Regular model fit
+        print(f"-model fit starting")
+        step, x_train, y_train = next(airplane_set.get_batches(batch_size))
+        print(f"Next {step} {x_train.shape} {y_train}")
+        history = model.fit(
+            x=x_train,
+            y=y_train,
+            batch_size=batch_size,
+            epochs=num_epochs,
+            validation_split=0.1,
+            callbacks=[
+                checkpoint_callback,
+                keras.callbacks.EarlyStopping(monitor="val_loss", patience=10),
+            ],
+            verbose=2,
+        )
+        print(f"-model fit done")
 
-    return history
+        return history
 
 
 patch_size = 32  # Size of the patches to be extracted from the input images
@@ -381,30 +305,91 @@ image_size = 112  # resize input images to this size
 path_images = "./101_ObjectCategories/airplanes/"
 path_annot = "./Annotations/Airplanes_Side_2/"
 
-path_to_downloaded_file = keras.utils.get_file(
-    fname="caltech_101_zipped",
-    origin="https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip",
-    extract=True,
-    archive_format="zip",  # downloaded file format
-    cache_dir=".",  # cache and extract in current directory
-)
-download_base_dir = os.path.dirname(path_to_downloaded_file)
+import pathlib
 
-# Extracting tar files found inside main zip file
-shutil.unpack_archive(
-    os.path.join(download_base_dir, "caltech_101_zipped/caltech-101", "101_ObjectCategories.tar.gz"), "."
-)
-shutil.unpack_archive(
-    os.path.join(download_base_dir, "caltech_101_zipped/caltech-101", "Annotations.tar"), "."
-)
+if False:
+    path_to_downloaded_file = keras.utils.get_file(
+        fname="101_ObjectCategories_archive",
+        #fname="101_ObjectCategories",
+        origin="https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip",
+        #origin="http://www.vision.caltech.edu/Image_Datasets/Caltech101/101_ObjectCategories.tar.gz",
+        #untar=True,
+        extract=True,
+        archive_format="zip",  # downloaded file format
+        cache_dir="./cache-2",  # cache and extract in current directory
+    )
+    print(path_to_downloaded_file)
+    download_base_dir = os.path.dirname(path_to_downloaded_file)
+    print(download_base_dir)
 
-airplane_set = AirplaneDataset()
-airplane_set.load_dataset2( path_images, path_annot)
-airplane_set.prepare()
+    print(path_to_downloaded_file)
+    data_dir = pathlib.Path(path_to_downloaded_file)
+    print(data_dir)
+    batch_size = 32
+    img_height = image_size
+    img_width = image_size
 
-# train set
-print('Train: %d' % len(airplane_set.image_ids))
+    path_to_downloaded_file = keras.utils.get_file(
+        fname="caltech_101_zipped",
+        origin="https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip",
+        extract=True,
+        archive_format="zip",  # downloaded file format
+        cache_dir=".",  # cache and extract in current directory
+    )
+    download_base_dir = os.path.dirname(path_to_downloaded_file)
 
+    # Extracting tar files found inside main zip file
+    shutil.unpack_archive(
+        os.path.join(download_base_dir, "caltech_101_zipped/caltech-101", "101_ObjectCategories.tar.gz"), "."
+    )
+
+    data_dir = pathlib.Path("./101_ObjectCategories/").with_suffix('')
+    print('data_dir', data_dir)
+
+    import glob
+    jpgs = glob.glob(f'data_dir/*/*.jpg')
+    shutil.unpack_archive(
+        os.path.join(download_base_dir, "caltech_101_zipped/caltech-101", "Annotations.tar"), "."
+    )
+    pngs = [f.split('.jpg')[0] + "_segmentation" + ".png" for f in jpgs]
+
+    #airplane_set = keras.utils.image_dataset_from_tensor_slices((,))
+    airplane_set = keras.utils.image_dataset_from_directory(
+        data_dir,
+        validation_split=0.2,
+        subset="training",
+        seed=123,
+        image_size=(img_height, img_width),
+        batch_size=batch_size
+    )
+    #airplane_set.prepare()
+    #for elem in airplane_set:
+    #    print( elem)
+    #    break
+elif False:
+    path_to_downloaded_file = keras.utils.get_file(
+        fname="caltech_101_zipped",
+        origin="https://data.caltech.edu/records/mzrjq-6wc02/files/caltech-101.zip",
+        extract=True,
+        archive_format="zip",  # downloaded file format
+        cache_dir=".",  # cache and extract in current directory
+    )
+    download_base_dir = os.path.dirname(path_to_downloaded_file)
+
+    # Extracting tar files found inside main zip file
+    shutil.unpack_archive(
+        os.path.join(download_base_dir, "caltech_101_zipped/caltech-101", "101_ObjectCategories.tar.gz"), "."
+    )
+    shutil.unpack_archive(
+        os.path.join(download_base_dir, "caltech_101_zipped/caltech-101", "Annotations.tar"), "."
+    )
+
+    airplane_set = AirplaneDataset()
+    airplane_set.load_dataset( path_images, path_annot, image_size, 5)
+    airplane_set.prepare()
+
+    # train set
+#print('Train: %d' % len(airplane_set.image_ids))
 
 ## Convert the list to numpy array, split to train and test dataset
 #(x_train), (y_train) = (
@@ -421,31 +406,35 @@ print('Train: %d' % len(airplane_set.image_ids))
 """
 ## Display patches for an input image
 """
+def display_image_patch(image):
+    plt.figure(figsize=(4, 4))
+    #plt.imshow(x_train[0].astype("uint8"))
+    plt.imshow(image.astype("uint8"))
+    plt.axis("off")
+    #print(f"Plot 1 done")
 
-plt.figure(figsize=(4, 4))
-#plt.imshow(x_train[0].astype("uint8"))
-plt.axis("off")
-#print(f"Plot 1 done")
-
-#patches = Patches(patch_size)(np.expand_dims(x_train[0], axis=0))
-print(f"Image size: {image_size} X {image_size}")
-print(f"Patch size: {patch_size} X {patch_size}")
-#print(f"{patches.shape[1]} patches per image \n{patches.shape[-1]} elements per patch")
+    patches = Patches(patch_size)(np.expand_dims( image, axis=0))
+    print(f"Image size: {image_size} X {image_size}")
+    print(f"Patch size: {patch_size} X {patch_size}")
+    print(f"{patches.shape[1]} patches per image \n{patches.shape[-1]} elements per patch")
 
 
-#n = int(np.sqrt(patches.shape[1]))
-#plt.figure(figsize=(4, 4))
-#for i, patch in enumerate(patches[0]):
-#    ax = plt.subplot(n, n, i + 1)
-#    patch_img = ops.reshape(patch, (patch_size, patch_size, 3))
-#    plt.imshow(ops.convert_to_numpy(patch_img).astype("uint8"))
-#    plt.axis("off")
-#print(f"Plot 2 done")
+    n = int(np.sqrt(patches.shape[1]))
+    plt.figure(figsize=(4, 4))
+    for i, patch in enumerate(patches[0]):
+        ax = plt.subplot(n, n, i + 1)
+        patch_img = ops.reshape(patch, (patch_size, patch_size, 3))
+        plt.imshow(ops.convert_to_numpy(patch_img).astype("uint8"))
+        plt.axis("off")
+    #print(f"Plot 2 done")
+
+#display_image_patch( airplane_set.load_image( airplane_set.image_ids[0]))
 
 input_shape = (image_size, image_size, 3)  # input image shape
 learning_rate = 0.001
 weight_decay = 0.0001
-batch_size = 32
+#batch_size = 32
+batch_size = 3
 num_epochs = 100
 num_patches = (image_size // patch_size) ** 2
 projection_dim = 64
@@ -457,12 +446,11 @@ transformer_units = [
 ]
 transformer_layers = 4
 mlp_head_units = [2048, 1024, 512, 64, 32]  # Size of the dense layers
-#print(f"Config done")
+##print(f"Config done")
 
 ################
 
 history = []
-num_patches = (image_size // patch_size) ** 2
 
 vit_object_detector = create_vit_object_detector(
     input_shape,
@@ -476,11 +464,635 @@ vit_object_detector = create_vit_object_detector(
 )
 print(f"Detector creation done")
 
+# Import Mask RCNN
+from mrcnn.config import Config
+
+# define a configuration for the model
+class KangarooConfig(Config):
+	# define the name of the configuration
+	NAME = "kangaroo_cfg"
+	# number of classes (background + kangaroo)
+	NUM_CLASSES = 1 + 1
+	# number of training steps per epoch
+	STEPS_PER_EPOCH = 131
+ 
+from KangarooDataset  import KangarooDataset 
+
+# Import Mask RCNN
+sys.path.append(OBJECT_DETECTOR_ROOT_DIR)  # To find local version of the library
+import mrcnn.model as modellib
+
+import math
+import logging
+
+def data_generator(dataset, config, shuffle=True, augment=False, augmentation=None,
+                   random_rois=0, batch_size=1, detection_targets=False,
+                   no_augmentation_sources=None):
+    """A generator that returns images and corresponding target class ids,
+    bounding box deltas, and masks.
+
+    dataset: The Dataset object to pick data from
+    config: The model config object
+    shuffle: If True, shuffles the samples before every epoch
+    augment: (deprecated. Use augmentation instead). If true, apply random
+        image augmentation. Currently, only horizontal flipping is offered.
+    augmentation: Optional. An imgaug (https://github.com/aleju/imgaug) augmentation.
+        For example, passing imgaug.augmenters.Fliplr(0.5) flips images
+        right/left 50% of the time.
+    random_rois: If > 0 then generate proposals to be used to train the
+                 network classifier and mask heads. Useful if training
+                 the Mask RCNN part without the RPN.
+    batch_size: How many images to return in each call
+    detection_targets: If True, generate detection targets (class IDs, bbox
+        deltas, and masks). Typically for debugging or visualizations because
+        in trainig detection targets are generated by DetectionTargetLayer.
+    no_augmentation_sources: Optional. List of sources to exclude for
+        augmentation. A source is string that identifies a dataset and is
+        defined in the Dataset class.
+
+    Returns a Python generator. Upon calling next() on it, the
+    generator returns two lists, inputs and outputs. The contents
+    of the lists differs depending on the received arguments:
+    inputs list:
+    - images: [batch, H, W, C]
+    - image_meta: [batch, (meta data)] Image details. See compose_image_meta()
+    - rpn_match: [batch, N] Integer (1=positive anchor, -1=negative, 0=neutral)
+    - rpn_bbox: [batch, N, (dy, dx, log(dh), log(dw))] Anchor bbox deltas.
+    - gt_class_ids: [batch, MAX_GT_INSTANCES] Integer class IDs
+    - gt_boxes: [batch, MAX_GT_INSTANCES, (y1, x1, y2, x2)]
+    - gt_masks: [batch, height, width, MAX_GT_INSTANCES]. The height and width
+                are those of the image unless use_mini_mask is True, in which
+                case they are defined in MINI_MASK_SHAPE.
+
+    outputs list: Usually empty in regular training. But if detection_targets
+        is True then the outputs list contains target class_ids, bbox deltas,
+        and masks.
+    """
+
+    def compute_backbone_shapes(config, image_shape):
+        """Computes the width and height of each stage of the backbone network.
+
+        Returns:
+            [N, (height, width)]. Where N is the number of stages
+        """
+        if callable(config.BACKBONE):
+            return config.COMPUTE_BACKBONE_SHAPE(image_shape)
+
+        # Currently supports ResNet only
+        assert config.BACKBONE in ["resnet50", "resnet101"]
+        return np.array(
+            [[int(math.ceil(image_shape[0] / stride)),
+                int(math.ceil(image_shape[1] / stride))]
+                for stride in config.BACKBONE_STRIDES])
+    #### ####
+
+    def compose_image_meta(image_id, original_image_shape, image_shape,
+                           window, scale, active_class_ids):
+        """Takes attributes of an image and puts them in one 1D array.
+
+        image_id: An int ID of the image. Useful for debugging.
+        original_image_shape: [H, W, C] before resizing or padding.
+        image_shape: [H, W, C] after resizing and padding
+        window: (y1, x1, y2, x2) in pixels. The area of the image where the real
+                image is (excluding the padding)
+        scale: The scaling factor applied to the original image (float32)
+        active_class_ids: List of class_ids available in the dataset from which
+            the image came. Useful if training on images from multiple datasets
+            where not all classes are present in all datasets.
+        """
+        meta = np.array(
+            [image_id] +                  # size=1
+            list(original_image_shape) +  # size=3
+            list(image_shape) +           # size=3
+            list(window) +                # size=4 (y1, x1, y2, x2) in image cooredinates
+            [scale] +                     # size=1
+            list(active_class_ids)        # size=num_classes
+        )
+        return meta
+
+    #### ####
+
+    def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
+                      use_mini_mask=False):
+        """Load and return ground truth data for an image (image, mask, bounding boxes).
+
+        augment: (deprecated. Use augmentation instead). If true, apply random
+            image augmentation. Currently, only horizontal flipping is offered.
+        augmentation: Optional. An imgaug (https://github.com/aleju/imgaug) augmentation.
+            For example, passing imgaug.augmenters.Fliplr(0.5) flips images
+            right/left 50% of the time.
+        use_mini_mask: If False, returns full-size masks that are the same height
+            and width as the original image. These can be big, for example
+            1024x1024x100 (for 100 instances). Mini masks are smaller, typically,
+            224x224 and are generated by extracting the bounding box of the
+            object and resizing it to MINI_MASK_SHAPE.
+
+        Returns:
+        image: [height, width, 3]
+        shape: the original shape of the image before resizing and cropping.
+        class_ids: [instance_count] Integer class IDs
+        bbox: [instance_count, (y1, x1, y2, x2)]
+        mask: [height, width, instance_count]. The height and width are those
+            of the image unless use_mini_mask is True, in which case they are
+            defined in MINI_MASK_SHAPE.
+        """
+        # Load image and mask
+        image = dataset.load_image(image_id)
+        mask, class_ids = dataset.load_mask(image_id)
+        original_shape = image.shape
+        image, window, scale, padding, crop = utils.resize_image(
+            image,
+            min_dim=config.IMAGE_MIN_DIM,
+            min_scale=config.IMAGE_MIN_SCALE,
+            max_dim=config.IMAGE_MAX_DIM,
+            mode=config.IMAGE_RESIZE_MODE)
+        mask = utils.resize_mask(mask, scale, padding, crop)
+
+        # Random horizontal flips.
+        # TODO: will be removed in a future update in favor of augmentation
+        if augment:
+            logging.warning("'augment' is deprecated. Use 'augmentation' instead.")
+            if random.randint(0, 1):
+                image = np.fliplr(image)
+                mask = np.fliplr(mask)
+
+        # Augmentation
+        # This requires the imgaug lib (https://github.com/aleju/imgaug)
+        if augmentation:
+            import imgaug
+
+            # Augmenters that are safe to apply to masks
+            # Some, such as Affine, have settings that make them unsafe, so always
+            # test your augmentation on masks
+            MASK_AUGMENTERS = ["Sequential", "SomeOf", "OneOf", "Sometimes",
+                               "Fliplr", "Flipud", "CropAndPad",
+                               "Affine", "PiecewiseAffine"]
+
+            def hook(images, augmenter, parents, default):
+                """Determines which augmenters to apply to masks."""
+                return augmenter.__class__.__name__ in MASK_AUGMENTERS
+
+            # Store shapes before augmentation to compare
+            image_shape = image.shape
+            mask_shape = mask.shape
+            # Make augmenters deterministic to apply similarly to images and masks
+            det = augmentation.to_deterministic()
+            image = det.augment_image(image)
+            # Change mask to np.uint8 because imgaug doesn't support np.bool
+            mask = det.augment_image(mask.astype(np.uint8),
+                                     hooks=imgaug.HooksImages(activator=hook))
+            # Verify that shapes didn't change
+            assert image.shape == image_shape, "Augmentation shouldn't change image size"
+            assert mask.shape == mask_shape, "Augmentation shouldn't change mask size"
+            # Change mask back to bool
+            mask = mask.astype(np.bool)
+
+        # Note that some boxes might be all zeros if the corresponding mask got cropped out.
+        # and here is to filter them out
+        _idx = np.sum(mask, axis=(0, 1)) > 0
+        mask = mask[:, :, _idx]
+        class_ids = class_ids[_idx]
+        # Bounding boxes. Note that some boxes might be all zeros
+        # if the corresponding mask got cropped out.
+        # bbox: [num_instances, (y1, x1, y2, x2)]
+        bbox = utils.extract_bboxes(mask)
+
+        # Active classes
+        # Different datasets have different classes, so track the
+        # classes supported in the dataset of this image.
+        active_class_ids = np.zeros([dataset.num_classes], dtype=np.int32)
+        source_class_ids = dataset.source_class_ids[dataset.image_info[image_id]["source"]]
+        active_class_ids[source_class_ids] = 1
+
+        # Resize masks to smaller size to reduce memory usage
+        if use_mini_mask:
+            mask = utils.minimize_mask(bbox, mask, config.MINI_MASK_SHAPE)
+
+        # Image meta data
+        image_meta = compose_image_meta(image_id, original_shape, image.shape,
+                                        window, scale, active_class_ids)
+
+        return image, image_meta, class_ids, bbox, mask
+
+
+    #### ####
+
+    def build_rpn_targets(image_shape, anchors, gt_class_ids, gt_boxes, config):
+        """Given the anchors and GT boxes, compute overlaps and identify positive
+        anchors and deltas to refine them to match their corresponding GT boxes.
+
+        anchors: [num_anchors, (y1, x1, y2, x2)]
+        gt_class_ids: [num_gt_boxes] Integer class IDs.
+        gt_boxes: [num_gt_boxes, (y1, x1, y2, x2)]
+
+        Returns:
+        rpn_match: [N] (int32) matches between anchors and GT boxes.
+                   1 = positive anchor, -1 = negative anchor, 0 = neutral
+        rpn_bbox: [N, (dy, dx, log(dh), log(dw))] Anchor bbox deltas.
+        """
+        # RPN Match: 1 = positive anchor, -1 = negative anchor, 0 = neutral
+        rpn_match = np.zeros([anchors.shape[0]], dtype=np.int32)
+        # RPN bounding boxes: [max anchors per image, (dy, dx, log(dh), log(dw))]
+        rpn_bbox = np.zeros((config.RPN_TRAIN_ANCHORS_PER_IMAGE, 4))
+
+        # Handle COCO crowds
+        # A crowd box in COCO is a bounding box around several instances. Exclude
+        # them from training. A crowd box is given a negative class ID.
+        crowd_ix = np.where(gt_class_ids < 0)[0]
+        if crowd_ix.shape[0] > 0:
+            # Filter out crowds from ground truth class IDs and boxes
+            non_crowd_ix = np.where(gt_class_ids > 0)[0]
+            crowd_boxes = gt_boxes[crowd_ix]
+            gt_class_ids = gt_class_ids[non_crowd_ix]
+            gt_boxes = gt_boxes[non_crowd_ix]
+            # Compute overlaps with crowd boxes [anchors, crowds]
+            crowd_overlaps = utils.compute_overlaps(anchors, crowd_boxes)
+            crowd_iou_max = np.amax(crowd_overlaps, axis=1)
+            no_crowd_bool = (crowd_iou_max < 0.001)
+        else:
+            # All anchors don't intersect a crowd
+            no_crowd_bool = np.ones([anchors.shape[0]], dtype=bool)
+
+        # Compute overlaps [num_anchors, num_gt_boxes]
+        overlaps = utils.compute_overlaps(anchors, gt_boxes)
+
+        # Match anchors to GT Boxes
+        # If an anchor overlaps a GT box with IoU >= 0.7 then it's positive.
+        # If an anchor overlaps a GT box with IoU < 0.3 then it's negative.
+        # Neutral anchors are those that don't match the conditions above,
+        # and they don't influence the loss function.
+        # However, don't keep any GT box unmatched (rare, but happens). Instead,
+        # match it to the closest anchor (even if its max IoU is < 0.3).
+        #
+        # 1. Set negative anchors first. They get overwritten below if a GT box is
+        # matched to them. Skip boxes in crowd areas.
+        anchor_iou_argmax = np.argmax(overlaps, axis=1)
+        anchor_iou_max = overlaps[np.arange(overlaps.shape[0]), anchor_iou_argmax]
+        rpn_match[(anchor_iou_max < 0.3) & (no_crowd_bool)] = -1
+        # 2. Set an anchor for each GT box (regardless of IoU value).
+        # If multiple anchors have the same IoU match all of them
+        gt_iou_argmax = np.argwhere(overlaps == np.max(overlaps, axis=0))[:,0]
+        rpn_match[gt_iou_argmax] = 1
+        # 3. Set anchors with high overlap as positive.
+        rpn_match[anchor_iou_max >= 0.7] = 1
+
+        # Subsample to balance positive and negative anchors
+        # Don't let positives be more than half the anchors
+        ids = np.where(rpn_match == 1)[0]
+        extra = len(ids) - (config.RPN_TRAIN_ANCHORS_PER_IMAGE // 2)
+        if extra > 0:
+            # Reset the extra ones to neutral
+            ids = np.random.choice(ids, extra, replace=False)
+            rpn_match[ids] = 0
+        # Same for negative proposals
+        ids = np.where(rpn_match == -1)[0]
+        extra = len(ids) - (config.RPN_TRAIN_ANCHORS_PER_IMAGE -
+                            np.sum(rpn_match == 1))
+        if extra > 0:
+            # Rest the extra ones to neutral
+            ids = np.random.choice(ids, extra, replace=False)
+            rpn_match[ids] = 0
+
+        # For positive anchors, compute shift and scale needed to transform them
+        # to match the corresponding GT boxes.
+        ids = np.where(rpn_match == 1)[0]
+        ix = 0  # index into rpn_bbox
+        # TODO: use box_refinement() rather than duplicating the code here
+        for i, a in zip(ids, anchors[ids]):
+            # Closest gt box (it might have IoU < 0.7)
+            gt = gt_boxes[anchor_iou_argmax[i]]
+
+            # Convert coordinates to center plus width/height.
+            # GT Box
+            gt_h = gt[2] - gt[0]
+            gt_w = gt[3] - gt[1]
+            gt_center_y = gt[0] + 0.5 * gt_h
+            gt_center_x = gt[1] + 0.5 * gt_w
+            # Anchor
+            a_h = a[2] - a[0]
+            a_w = a[3] - a[1]
+            a_center_y = a[0] + 0.5 * a_h
+            a_center_x = a[1] + 0.5 * a_w
+
+            # Compute the bbox refinement that the RPN should predict.
+            rpn_bbox[ix] = [
+                (gt_center_y - a_center_y) / a_h,
+                (gt_center_x - a_center_x) / a_w,
+                np.log(gt_h / a_h),
+                np.log(gt_w / a_w),
+            ]
+            # Normalize
+            rpn_bbox[ix] /= config.RPN_BBOX_STD_DEV
+            ix += 1
+
+        return rpn_match, rpn_bbox
+
+    #### ####
+
+    def mold_image(images, config):
+        """Expects an RGB image (or array of images) and subtracts
+        the mean pixel and converts it to float. Expects image
+        colors in RGB order.
+        """
+        return images.astype(np.float32) - config.MEAN_PIXEL
+
+    #### ####
+
+    b = 0  # batch item index
+    image_index = -1
+    image_ids = np.copy(dataset.image_ids)
+    error_count = 0
+    no_augmentation_sources = no_augmentation_sources or []
+
+    # Anchors
+    # [anchor_count, (y1, x1, y2, x2)]
+    backbone_shapes = compute_backbone_shapes(config, config.IMAGE_SHAPE)
+    anchors = utils.generate_pyramid_anchors(config.RPN_ANCHOR_SCALES,
+                                             config.RPN_ANCHOR_RATIOS,
+                                             backbone_shapes,
+                                             config.BACKBONE_STRIDES,
+                                             config.RPN_ANCHOR_STRIDE)
+
+    # Keras requires a generator to run indefinitely.
+    while True:
+        try:
+            # Increment index to pick next image. Shuffle if at the start of an epoch.
+            image_index = (image_index + 1) % len(image_ids)
+            if shuffle and image_index == 0:
+                np.random.shuffle(image_ids)
+
+            # Get GT bounding boxes and masks for image.
+            image_id = image_ids[image_index]
+
+            # If the image source is not to be augmented pass None as augmentation
+            if dataset.image_info[image_id]['source'] in no_augmentation_sources:
+                image, image_meta, gt_class_ids, gt_boxes, gt_masks = \
+                load_image_gt(dataset, config, image_id, augment=augment,
+                              augmentation=None,
+                              use_mini_mask=config.USE_MINI_MASK)
+            else:
+                image, image_meta, gt_class_ids, gt_boxes, gt_masks = \
+                    load_image_gt(dataset, config, image_id, augment=augment,
+                                augmentation=augmentation,
+                                use_mini_mask=config.USE_MINI_MASK)
+
+            # Skip images that have no instances. This can happen in cases
+            # where we train on a subset of classes and the image doesn't
+            # have any of the classes we care about.
+            if not np.any(gt_class_ids > 0):
+                continue
+
+            # RPN Targets
+            rpn_match, rpn_bbox = build_rpn_targets(image.shape, anchors,
+                                                    gt_class_ids, gt_boxes, config)
+
+            # Mask R-CNN Targets
+            if random_rois:
+                rpn_rois = generate_random_rois(
+                    image.shape, random_rois, gt_class_ids, gt_boxes)
+                if detection_targets:
+                    rois, mrcnn_class_ids, mrcnn_bbox, mrcnn_mask =\
+                        build_detection_targets(
+                            rpn_rois, gt_class_ids, gt_boxes, gt_masks, config)
+
+            # Init batch arrays
+            if b == 0:
+                batch_image_meta = np.zeros(
+                    (batch_size,) + image_meta.shape, dtype=image_meta.dtype)
+                batch_rpn_match = np.zeros(
+                    [batch_size, anchors.shape[0], 1], dtype=rpn_match.dtype)
+                batch_rpn_bbox = np.zeros(
+                    [batch_size, config.RPN_TRAIN_ANCHORS_PER_IMAGE, 4], dtype=rpn_bbox.dtype)
+                batch_images = np.zeros(
+                    (batch_size,) + image.shape, dtype=np.float32)
+                batch_gt_class_ids = np.zeros(
+                    (batch_size, config.MAX_GT_INSTANCES), dtype=np.int32)
+                batch_gt_boxes = np.zeros(
+                    (batch_size, config.MAX_GT_INSTANCES, 4), dtype=np.int32)
+                batch_gt_masks = np.zeros(
+                    (batch_size, gt_masks.shape[0], gt_masks.shape[1],
+                     config.MAX_GT_INSTANCES), dtype=gt_masks.dtype)
+                if random_rois:
+                    batch_rpn_rois = np.zeros(
+                        (batch_size, rpn_rois.shape[0], 4), dtype=rpn_rois.dtype)
+                    if detection_targets:
+                        batch_rois = np.zeros(
+                            (batch_size,) + rois.shape, dtype=rois.dtype)
+                        batch_mrcnn_class_ids = np.zeros(
+                            (batch_size,) + mrcnn_class_ids.shape, dtype=mrcnn_class_ids.dtype)
+                        batch_mrcnn_bbox = np.zeros(
+                            (batch_size,) + mrcnn_bbox.shape, dtype=mrcnn_bbox.dtype)
+                        batch_mrcnn_mask = np.zeros(
+                            (batch_size,) + mrcnn_mask.shape, dtype=mrcnn_mask.dtype)
+
+            # If more instances than fits in the array, sub-sample from them.
+            if gt_boxes.shape[0] > config.MAX_GT_INSTANCES:
+                ids = np.random.choice(
+                    np.arange(gt_boxes.shape[0]), config.MAX_GT_INSTANCES, replace=False)
+                gt_class_ids = gt_class_ids[ids]
+                gt_boxes = gt_boxes[ids]
+                gt_masks = gt_masks[:, :, ids]
+
+            # Add to batch
+            batch_image_meta[b] = image_meta
+            batch_rpn_match[b] = rpn_match[:, np.newaxis]
+            batch_rpn_bbox[b] = rpn_bbox
+            batch_images[b] = mold_image(image.astype(np.float32), config)
+            batch_gt_class_ids[b, :gt_class_ids.shape[0]] = gt_class_ids
+            batch_gt_boxes[b, :gt_boxes.shape[0]] = gt_boxes
+            batch_gt_masks[b, :, :, :gt_masks.shape[-1]] = gt_masks
+            if random_rois:
+                batch_rpn_rois[b] = rpn_rois
+                if detection_targets:
+                    batch_rois[b] = rois
+                    batch_mrcnn_class_ids[b] = mrcnn_class_ids
+                    batch_mrcnn_bbox[b] = mrcnn_bbox
+                    batch_mrcnn_mask[b] = mrcnn_mask
+            b += 1
+
+            # Batch full?
+            if b >= batch_size:
+                inputs = [batch_images, batch_image_meta, batch_rpn_match, batch_rpn_bbox, batch_gt_class_ids, batch_gt_boxes, batch_gt_masks]
+                outputs = []
+
+                if random_rois:
+                    inputs.extend([batch_rpn_rois])
+                    if detection_targets:
+                        inputs.extend([batch_rois])
+                        # Keras requires that output and targets have the same number of dimensions
+                        batch_mrcnn_class_ids = np.expand_dims(
+                            batch_mrcnn_class_ids, -1)
+                        outputs.extend(
+                            [batch_mrcnn_class_ids, batch_mrcnn_bbox, batch_mrcnn_mask])
+
+                for i in range(len(inputs)):
+                    print( 'inputs', i, np.array(inputs[i]).shape)
+                print( 'outputs1', np.array(outputs).shape)
+                print( 'outputs2', len(outputs))
+                print( 'outputs3', outputs)
+                yield inputs, outputs
+
+                # start a new batch
+                b = 0
+        except (GeneratorExit, KeyboardInterrupt):
+            raise
+        except:
+            # Log it and skip the image
+            logging.exception("Error processing image {}".format(
+                dataset.image_info[image_id]))
+            error_count += 1
+            if error_count > 5:
+                raise
+
+class MaskRCNN(keras.Model):
+    def train(self, train_dataset, val_dataset, learning_rate, epochs, layers,
+              augmentation=None, custom_callbacks=None, no_augmentation_sources=None):
+        """Train the model.
+        train_dataset, val_dataset: Training and validation Dataset objects.
+        learning_rate: The learning rate to train with
+        epochs: Number of training epochs. Note that previous training epochs
+                are considered to be done alreay, so this actually determines
+                the epochs to train in total rather than in this particaular
+                call.
+        layers: Allows selecting wich layers to train. It can be:
+            - A regular expression to match layer names to train
+            - One of these predefined values:
+              heads: The RPN, classifier and mask heads of the network
+              all: All the layers
+              3+: Train Resnet stage 3 and up
+              4+: Train Resnet stage 4 and up
+              5+: Train Resnet stage 5 and up
+        augmentation: Optional. An imgaug (https://github.com/aleju/imgaug)
+            augmentation. For example, passing imgaug.augmenters.Fliplr(0.5)
+            flips images right/left 50% of the time. You can pass complex
+            augmentations as well. This augmentation applies 50% of the
+            time, and when it does it flips images right/left half the time
+            and adds a Gaussian blur with a random sigma in range 0 to 5.
+
+                augmentation = imgaug.augmenters.Sometimes(0.5, [
+                    imgaug.augmenters.Fliplr(0.5),
+                    imgaug.augmenters.GaussianBlur(sigma=(0.0, 5.0))
+                ])
+	    custom_callbacks: Optional. Add custom callbacks to be called
+	        with the keras fit_generator method. Must be list of type keras.callbacks.
+        no_augmentation_sources: Optional. List of sources to exclude for
+            augmentation. A source is string that identifies a dataset and is
+            defined in the Dataset class.
+        """
+        assert self.mode == "training", "Create model in training mode."
+
+        # Pre-defined layer regular expressions
+        layer_regex = {
+            # all layers but the backbone
+            "heads": r"(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+            # From a specific Resnet stage and up
+            "3+": r"(res3.*)|(bn3.*)|(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+            "4+": r"(res4.*)|(bn4.*)|(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+            "5+": r"(res5.*)|(bn5.*)|(mrcnn\_.*)|(rpn\_.*)|(fpn\_.*)",
+            # All layers
+            "all": ".*",
+        }
+        if layers in layer_regex.keys():
+            layers = layer_regex[layers]
+
+        # Data generators
+        train_generator = data_generator(train_dataset, self.config, shuffle=True,
+                                         augmentation=augmentation,
+                                         batch_size=self.config.BATCH_SIZE,
+                                         no_augmentation_sources=no_augmentation_sources)
+        val_generator = data_generator(val_dataset, self.config, shuffle=True,
+                                       batch_size=self.config.BATCH_SIZE)
+
+        # Create log_dir if it does not exist
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+
+        # Callbacks
+        callbacks = [
+            keras.callbacks.TensorBoard(log_dir=self.log_dir,
+                                        histogram_freq=0, write_graph=True, write_images=False),
+            keras.callbacks.ModelCheckpoint(self.checkpoint_path,
+                                            verbose=0, save_weights_only=True),
+        ]
+
+        # Add custom callbacks to the list
+        if custom_callbacks:
+            callbacks += custom_callbacks
+
+        # Train
+        log("\nStarting at epoch {}. LR={}\n".format(self.epoch, learning_rate))
+        log("Checkpoint Path: {}".format(self.checkpoint_path))
+        self.set_trainable(layers)
+        self.compile(learning_rate, self.config.LEARNING_MOMENTUM)
+
+        # Work-around for Windows: Keras fails on Windows when using
+        # multiprocessing workers. See discussion here:
+        # https://github.com/matterport/Mask_RCNN/issues/13#issuecomment-353124009
+        workers = multiprocessing.cpu_count()
+
+        self.keras_model.fit_generator(
+            train_generator,
+            initial_epoch=self.epoch,
+            epochs=epochs,
+            steps_per_epoch=self.config.STEPS_PER_EPOCH,
+            callbacks=callbacks,
+            validation_data=val_generator,
+            validation_steps=self.config.VALIDATION_STEPS,
+            max_queue_size=100,
+            workers=workers,
+            use_multiprocessing=True,
+        )
+        self.epoch = max(self.epoch, epochs)
+
 # Train model
-history = run_experiment(
-    vit_object_detector, learning_rate, weight_decay, batch_size, num_epochs
-)
-print(f"Experiment done")
+if True:
+    # prepare train set
+    train_set = KangarooDataset()
+    train_set.load_dataset('kangaroo', is_train=True)
+    train_set.prepare()
+    print('Train: %d' % len(train_set.image_ids))
+    # prepare test set
+    test_set = KangarooDataset()
+    test_set.load_dataset('kangaroo', is_train=True)
+    test_set.prepare()
+    print('Test: %d' % len(test_set.image_ids))
+    # prepare config
+    config = KangarooConfig()
+    config.display()
+    # define the model
+    #model = MaskRCNN(mode='training', model_dir='./', config=config)
+    print(input_shape)
+    model = create_vit_object_detector(
+        input_shape,
+        patch_size,
+        num_patches,
+        projection_dim,
+        num_heads,
+        transformer_units,
+        transformer_layers,
+        mlp_head_units,
+    )
+    # load weights (mscoco) and exclude the output layers
+    #model.load_weights('mask_rcnn_coco.h5', by_name=True, exclude=["mrcnn_class_logits", "mrcnn_bbox_fc",  "mrcnn_bbox", "mrcnn_mask"])
+    # train weights (output layers or 'heads')
+    #model.train(train_set, training=True)
+    #model.train(train_set, test_set, learning_rate=config.LEARNING_RATE, epochs=5, layers='heads')
+
+    optimizer = keras.optimizers.AdamW( learning_rate=learning_rate, weight_decay=weight_decay)
+    # Compile model.
+    model.compile(optimizer=optimizer, loss=keras.losses.MeanSquaredError())
+    print(f"Model compiled")
+
+    # Data generators
+    train_generator = data_generator(train_set, config, shuffle=True,
+                                         augmentation=None,
+                                         batch_size=config.BATCH_SIZE,
+                                         no_augmentation_sources=None)
+    model.fit(train_generator, epochs=5)
+
+else:
+    history = run_experiment( vit_object_detector, learning_rate, weight_decay, batch_size, num_epochs)
+    print(f"Experiment done")
 
 ##############################################################################
 
@@ -635,6 +1247,10 @@ The model can be improved further by tuning hyper-parameters and pre-training.
 - [Chapter 12: Object detection](https://deeplearningwithpython.io/chapters/chapter12_object-detection)
 """
 
+#########  END  ##############################################
+#########  END  ##############################################
+#########  END  ##############################################
+
 # Module Imports
 import os
 import sys
@@ -652,10 +1268,7 @@ OBJECT_DETECTOR_ROOT_DIR = os.path.abspath("/Mask-RCNN_model")
 
 tools_db_name = "object_detector"
 
-# Import Mask RCNN
-sys.path.append(OBJECT_DETECTOR_ROOT_DIR)  # To find local version of the library
 from mrcnn import utils
-import mrcnn.model as modellib
 #from mrcnn import visualize
 from mrcnn.config import Config
 
@@ -1060,3 +1673,75 @@ model.keras_model.save_weights(model_path)
 
 sys.exit(1)
 
+##############################################################################
+
+class AirplaneDataset(utils.Dataset):
+
+    # load the dataset definitions
+    def load_dataset(self, path_images, path_annot, image_size, min_mask_size, is_train=True):
+        self.add_class("dataset", 1, "Airplane")
+        image_paths = [ f for f in os.listdir(path_images) if os.path.isfile(os.path.join(path_images, f)) ]
+        image_paths.sort()
+        annot_paths = [ f for f in os.listdir(path_annot) if os.path.isfile(os.path.join(path_annot, f)) ]
+        annot_paths.sort()
+        # loop over the annotations and images, preprocess them and store in lists
+        for i in range(0, len(annot_paths)):
+            image = keras.utils.load_img( path_images + image_paths[i],)
+            w, h = image.size[:2]
+            #print(f"Loop {i} {path_annot + annot_paths[i]}")
+            targets = []
+            # Access bounding box coordinates
+            #print( f"Annot {scipy.io.loadmat(path_annot + annot_paths[i])}")
+            for annot in scipy.io.loadmat(path_annot + annot_paths[i])["box_coord"]:
+                #print(f"annot {annot}")
+                box = [ round(image_size*(float(coord) / w)) for coord in annot ]
+                if (box[1] - box[0] > min_mask_size) and (box[3] - box[2] > min_mask_size):
+                    # apply relative scaling to bounding boxes as per given image and append to list
+                    targets.append( box )
+                    #print(f"box {box[0]}:{box[2]} {box[1]}:{box[3]}")
+
+            if len( targets) > 0:
+                #print(f"Loop {i} {path_annot + annot_paths[i]} {path_images + image_paths[i]}")
+                # resize images # convert image to array and append to list
+                img = keras.utils.img_to_array(image.resize((image_size, image_size)))
+
+                self.add_image( 'dataset', image_id=id, image=img, annotation=targets, path=path_images + image_paths[i])
+                #print(f"Annot {i} done")
+
+
+    # load the masks for an image
+    def load_mask(self, image_id):
+        info = self.image_info[image_id]
+        boxes = info['annotation']
+        w, h, c = info['image'].shape
+        #print(f"shape {info['image'].shape}")
+        masks = np.zeros([h, w, len(boxes)], dtype='uint8')
+        #print(f"annotation {info['annotation']}")
+        #class_ids = list()
+        class_ids = np.zeros( len(boxes), dtype=np.int32)
+        for i, box in enumerate( boxes):
+            masks[box[1]:box[3], box[0]:box[2], i] = 1
+            #class_ids.append(self.class_names.index('Airplane'))
+            class_ids[i] = self.class_names.index('Airplane')
+            #print(f"box {masks.shape} {i} {box[0]}:{box[2]} {box[1]}:{box[3]}")
+        #return masks, np.asarray(class_ids, dtype='int32')
+        return masks, class_ids
+ 
+    # load an image reference
+    def load_image(self, image_id):
+        info = self.image_info[image_id]
+        return info['image']
+
+    # load an image reference
+    def get_batches(self, batch_size):
+        images = list ()
+        masks = list ()
+        print(f"batch start {len(self.image_ids)}")
+        for batch_idx in range(0, len(self.image_ids), batch_size):
+            images = np.array([self.load_image( id) for id in self.image_ids[ batch_idx:batch_idx+batch_size]])
+            #masks = np.array([(self.load_mask( id)) for id in self.image_ids[ batch_idx:batch_idx+batch_size]])
+            masks = [(self.load_mask( id)) for id in self.image_ids[ batch_idx:batch_idx+batch_size]]
+            #for i, id in enumerate(self.image_ids[ batch_idx:batch_idx+batch_size]):
+                #masks.append( self.load_mask( id))
+            print(f"batch {batch_idx} {len(images)} {images.shape} {len(masks)} {masks}")
+            yield batch_idx, images, masks
