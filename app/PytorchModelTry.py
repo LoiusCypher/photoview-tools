@@ -41,8 +41,8 @@ image_size = 256 # 513
 class COCOSegmentation(Dataset):
     #CAT_LIST = [0, 5, 2, 16, 9, 44, 6, 3, 17, 62, 21, 67, 18, 19, 4, 1, 64, 20, 63, 7, 72]
     #NUM_CLASSES = len(CAT_LIST)
-    NUM_CLASSES = 130
-    CAT_LIST = [c_idx for c_idx in range(NUM_CLASSES)]
+    #NUM_CLASSES = 130
+    #CAT_LIST = [c_idx for c_idx in range(NUM_CLASSES)]
 
     def __init__(self,
                  image_size=513,
@@ -78,6 +78,10 @@ class COCOSegmentation(Dataset):
         self.imagedir = os.path.join( imagedir, '{}{}'.format(split, year))
         #print(self.imagedir)
         self.coco = COCO(ann_file)
+        cats_ids = self.coco.getCatIds()
+        print( 'Categories count', len(cats_ids)+1, 'max', max(cats_ids))
+        self.NUM_CLASSES = max(cats_ids) + 1
+        self.CAT_LIST = [c_idx for c_idx in range(self.NUM_CLASSES)]
         #self.coco_mask = mask
         if os.path.exists(ids_file):
             self.ids = torch.load(ids_file)
@@ -108,17 +112,44 @@ class COCOSegmentation(Dataset):
         #print( '_img', _img, _img.shape)
         cocotarget = coco.loadAnns(coco.getAnnIds(imgIds=img_id))
         #_target = Image.fromarray(self._gen_seg_mask(
-        _target = { #
-            'masks': self._gen_seg_mask( cocotarget, img_metadata['height'], img_metadata['width']),
-            'boxes': torch.Tensor(
-                     [ [ instance['bbox'][1],
-                         instance['bbox'][0],
-                         instance['bbox'][1]+instance['bbox'][3],
-                         instance['bbox'][0]+instance['bbox'][2]
-                       ] for instance in cocotarget ]
-            ),
-            'labels': torch.tensor( [ instance['category_id'] for instance in cocotarget ], dtype=torch.long),
-        }
+        if True:
+            _target = { #
+                'labels': torch.tensor( [ instance['category_id'] for instance in cocotarget ], dtype=torch.long),
+                'masks': self._gen_seg_mask( cocotarget, img_metadata['height'], img_metadata['width']),
+                'boxes': torch.Tensor(
+                         [ [ instance['bbox'][1],
+                             instance['bbox'][0],
+                             instance['bbox'][1]+instance['bbox'][3],
+                             instance['bbox'][0]+instance['bbox'][2]
+                           ] for instance in cocotarget ]
+                ),
+            }
+        if True:
+            # Extract segmentation masks, bounding boxes and labels from annotations
+            boxes = []  # List to store bounding boxes
+            labels = []  # List to store category labels
+            masks = []  # List to store segmentation masks
+            for ann in cocotarget:
+                xmin, ymin, w, h = ann['bbox']  # Get bounding box in COCO format (x, y, width, height)
+                boxes.append([xmin, ymin, xmin + w, ymin + h])  # Append box in (xmin, ymin, xmax, ymax) format
+                labels.append(ann['category_id'])  # Append category ID
+                mask = self.coco.annToMask(ann)  # Convert segmentation to binary mask
+                masks.append(mask)  # Append mask
+            # Convert annotations to PyTorch tensors
+            boxes = torch.as_tensor(boxes, dtype=torch.float32)  # Bounding boxes as float tensors
+            labels = torch.as_tensor(labels, dtype=torch.int64)  # Labels as int64 tensors
+            masks = torch.as_tensor(masks, dtype=torch.uint8)  # Masks as uint8 tensors
+            area = torch.as_tensor([ann['area'] for ann in cocotarget], dtype=torch.float32)  # Area of each object
+            iscrowd = torch.as_tensor([ann.get('iscrowd', 0) for ann in cocotarget], dtype=torch.int64)  # Crowd annotations
+            # store everything in a dictionary
+            _target = {
+                "boxes": boxes,  # Bounding boxes
+                "labels": labels,  # Object labels
+                "masks": masks,  # Segmentation masks
+                "image_id": img_id,  # Image ID
+                "area": area,  # Area of each object
+                "iscrowd": iscrowd  # Crowd flags
+            }
         #print( '_target', _target, _target.shape)
         return _img, _target
 
@@ -145,7 +176,7 @@ class COCOSegmentation(Dataset):
 
     def _gen_seg_mask(self, target, h, w, item='segmentation'):
     #def _gen_seg_mask(self, target, h, w, item='bbox'):
-        print('new mask', h, w)
+        #print('new mask', h, w)
         #mask = np.zeros((h, w), dtype=np.uint8)
         mask = torch.zeros((h, w))
         #coco_mask = self.coco_mask
@@ -153,12 +184,12 @@ class COCOSegmentation(Dataset):
             # 'segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id'
             #print(instance.keys())
             #print( 'image_id', instance['image_id'])
-            print( f"category_id {instance['category_id']:02d}", end=' ')
+            #print( f"category_id {instance['category_id']:02d}", end=' ')
             category_info = self.coco.loadCats(instance['category_id'])
             category_name = category_info[0]['name']
             #print( f"cat info {category_info}", end=' ')
-            print( f"{category_name:10s}", end=' ')
-            print( f"bbox {instance['bbox']}")
+            #print( f"{category_name:10s}", end=' ')
+            #print( f"bbox {instance['bbox']}")
             #print( 'segmentation', instance['segmentation'])
             #print( 'area', instance['area'])
             #print( 'iscrowd', instance['iscrowd'])
@@ -203,10 +234,10 @@ class COCOSegmentation(Dataset):
             sample = composed_transforms(sample)
         else: # no exception raised
             sample['image'] = composed_transforms(sample['image'])
-            for key in sample['target'].keys():
-                print('key', key)
-                if key == 'masks':
-                    sample['target'][key] = composed_transforms(sample['target'][key])
+            #for key in sample['target'].keys():
+                ##print('key', key)
+                #if key == 'masks':
+                    #sample['target'][key] = composed_transforms(sample['target'][key])
         #print('transform Image after', sample['image'], sample['image'].shape)
         #print('transform label after', sample['label'], sample['label'].shape)
         return sample
@@ -263,6 +294,7 @@ from torch.utils.data import DataLoader
 coco_set = COCOSegmentation( year='2017', split='val', image_size=image_size)
 
 print( 'Dataset size', len(coco_set))
+#print( coco_set.NUM_CLASSES, len(coco_set.CAT_LIST))
 #print( coco_set[0])
 
 def print_batch(dataset_iter):
@@ -280,7 +312,7 @@ def print_batch(dataset_iter):
         #print(targets[1][0].keys())
         print()
 
-batch_size=2
+batch_size=4
 
 # Create the DataLoader with your collate_fn
 dataset_iter = DataLoader(
@@ -325,6 +357,10 @@ def run_inference(model, dataloader, batches_cnt):
         results = run_inference_batch( model, images)
         print_batch_results( i, batches_cnt, results)
 
+import math
+
+debug_loss=True
+
 def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_training):
     """
     Function to run a single training or evaluation epoch.
@@ -365,12 +401,21 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
                     #losses = model(inputs.to(device), move_data_to_device(targets, device))
                     losses = model(inputs, targets)
         
+	if debug_loss:
+            for key, val in losses.items():
+                #print( ' ', key, val, sum(val))
+                print( ' ', key, val)
+
         # Compute the loss
         loss = sum([loss for loss in losses.values()])  # Sum up the losses
+	if debug_loss:
+            print( 'loss', loss)
 
         # If in training mode, backpropagate the error and update the weights
         if is_training:
+            #print( 'training')
             if scaler:
+                #print( 'scaler')
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 old_scaler = scaler.get_scale()
@@ -378,6 +423,7 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
                 new_scaler = scaler.get_scale()
                 if new_scaler >= old_scaler:
                     lr_scheduler.step()
+                    #print( 'lr_scheduler.step()')
             else:
                 loss.backward()
                 optimizer.step()
@@ -387,6 +433,8 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
 
         # Update the total loss
         loss_item = loss.item()
+	if debug_loss:
+            print( 'loss_item', loss_item, 'math.isnan(loss_item)', math.isnan(loss_item), 'math.isfinite(loss_item)', math.isfinite(loss_item))
         epoch_loss += loss_item
         
         # Update the progress bar
@@ -395,11 +443,14 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
             #progress_bar_dict.update(lr=lr_scheduler.get_last_lr()[0])
         #progress_bar.set_postfix(progress_bar_dict)
         #progress_bar.update()
+        print('batch', batch_id, 'done')
 
         # If loss is NaN or infinity, stop training
         if is_training:
-            stop_training_message = f"Loss is NaN or infinite at epoch {epoch_id}, batch {batch_id}. Stopping training."
-            assert not math.isnan(loss_item) and math.isfinite(loss_item), stop_training_message
+            stop_training_message = f"Loss is NaN and infinite at epoch {epoch_id}, batch {batch_id}. Stopping training."
+            assert not math.isnan(loss_item) or math.isfinite(loss_item), stop_training_message
+            assert not math.isnan(loss_item), f"Loss is NaN epoch {epoch_id}, batch {batch_id}. Stopping training."
+            assert math.isfinite(loss_item), f"Loss is infinite at epoch {epoch_id}, batch {batch_id}. Stopping training."
 
     # Cleanup and close the progress bar 
     #progress_bar.close()
@@ -415,18 +466,28 @@ from torchvision.models.detection.mask_rcnn import maskrcnn_resnet50_fpn, MaskRC
 #maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
 model = maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.COCO_V1)
 
-print( 'in_features', model.roi_heads.box_predictor.cls_score.in_features)
-print( 'in_chanels',  model.roi_heads.mask_predictor.conv5_mask.in_channels)
+in_features_box = model.roi_heads.box_predictor.cls_score.in_features
+in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
+out_chanels_mask = model.roi_heads.mask_predictor.conv5_mask.out_channels
 
-print( 'out_chanels', model.roi_heads.mask_predictor.conv5_mask.out_channels)
+from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+if True:
+    #coco_set.NUM_CLASSES = 4
+    print( 'NUM_CLASSES', coco_set.NUM_CLASSES)
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_channels=in_features_box, num_classes=coco_set.NUM_CLASSES)
+    model.roi_heads.mask_predictor = MaskRCNNPredictor(in_channels=in_features_mask, dim_reduced=min(256,out_chanels_mask), num_classes=coco_set.NUM_CLASSES)
+    new_in_features_box = model.roi_heads.box_predictor.cls_score.in_features
+    new_in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
+    new_out_chanels_mask = model.roi_heads.mask_predictor.conv5_mask.out_channels
+    print( 'in_features_box', in_features_box, '->', new_in_features_box,
+           'in_features_mask', in_features_mask, '->', new_in_features_mask,
+           'out_chanels_mask', out_chanels_mask, '->', new_out_chanels_mask)
+else:
+    print( 'in_features_box', in_features_box, 'in_features_mask', in_features_mask, 'out_chanels_mask', out_chanels_mask)
 
-
-if False:
-    # Replace the box predictor
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_channels=in_features_box, num_classes=len(class_names))
-    # Replace the mask predictor
-    model.roi_heads.mask_predictor = MaskRCNNPredictor(in_channels=in_features_mask, dim_reduced=dim_reduced, num_classes=len(class_names))
-
+#from torchtnt.utils import get_module_summary
+#print( get_module_summary(model.eval(), [torch.randn(1, 3, 256, 256)]))
 
 model.eval()
 print('before evaluate')
@@ -440,16 +501,16 @@ batches_cnt = 1 + (len(coco_set) - 1) // batch_size
 #run_inference(model, dataset_iter, batches_cnt)
 
 # Learning rate for the model
-lr = 5e-4
+lr = 5e-6
 # Number of training epochs
-epochs = 40
+epochs = 50
 # AdamW optimizer; includes weight decay for regularization
 optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 # Learning rate scheduler; adjusts the learning rate during training
+print('trainiing steps', epochs*len(dataset_iter), 'epochs', epochs, 'batches', len(dataset_iter))
 lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=lr, total_steps=epochs*len(dataset_iter))
 
 run_epoch(model, dataset_iter, optimizer, lr_scheduler, scaler=None, epoch_id=1, is_training=True)
-
 
 from torchvision.models.detection.mask_rcnn import maskrcnn_resnet50_fpn_v2, MaskRCNN_ResNet50_FPN_V2_Weights
 maskrcnn_resnet50_fpn_v2(weights=MaskRCNN_ResNet50_FPN_V2_Weights.DEFAULT)
