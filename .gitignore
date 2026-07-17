@@ -1,3 +1,16 @@
+Mask-RCNN*
+app/101_ObjectCategories
+app/Annotations
+app/core.*
+app/datasets
+app/debug
+app/kangaroo
+arm_compute-v53.2.0-linux-aarch64-cpu-bin.tar.gz
+arm_compute-v53.2.0-linux-aarch64-cpu-bin
+data
+handwriting
+logs
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
