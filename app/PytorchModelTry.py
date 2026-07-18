@@ -358,6 +358,7 @@ def run_inference(model, dataloader, batches_cnt):
         print_batch_results( i, batches_cnt, results)
 
 import math
+from tqdm.auto import tqdm
 
 debug_loss=True
 
@@ -384,7 +385,7 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
         model.eval()
     
     epoch_loss = 0  # Initialize the total loss for this epoch
-    #progress_bar = tqdm(total=len(dataloader), desc="Train" if is_training else "Eval")  # Initialize a progress bar
+    progress_bar = tqdm(total=len(dataloader), desc="Train" if is_training else "Eval")  # Initialize a progress bar
     
     # Loop over the data
     for batch_id, (inputs, targets) in enumerate(dataloader):
@@ -401,14 +402,14 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
                     #losses = model(inputs.to(device), move_data_to_device(targets, device))
                     losses = model(inputs, targets)
         
-	if debug_loss:
+        if debug_loss:
             for key, val in losses.items():
                 #print( ' ', key, val, sum(val))
                 print( ' ', key, val)
 
         # Compute the loss
         loss = sum([loss for loss in losses.values()])  # Sum up the losses
-	if debug_loss:
+        if debug_loss:
             print( 'loss', loss)
 
         # If in training mode, backpropagate the error and update the weights
@@ -433,16 +434,16 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
 
         # Update the total loss
         loss_item = loss.item()
-	if debug_loss:
+        if debug_loss:
             print( 'loss_item', loss_item, 'math.isnan(loss_item)', math.isnan(loss_item), 'math.isfinite(loss_item)', math.isfinite(loss_item))
         epoch_loss += loss_item
         
         # Update the progress bar
-        #progress_bar_dict = dict(loss=loss_item, avg_loss=epoch_loss/(batch_id+1))
-        #if is_training:
-            #progress_bar_dict.update(lr=lr_scheduler.get_last_lr()[0])
-        #progress_bar.set_postfix(progress_bar_dict)
-        #progress_bar.update()
+        progress_bar_dict = dict(loss=loss_item, avg_loss=epoch_loss/(batch_id+1))
+        if is_training:
+            progress_bar_dict.update(lr=lr_scheduler.get_last_lr()[0])
+        progress_bar.set_postfix(progress_bar_dict)
+        progress_bar.update()
         print('batch', batch_id, 'done')
 
         # If loss is NaN or infinity, stop training
@@ -453,7 +454,7 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
             assert math.isfinite(loss_item), f"Loss is infinite at epoch {epoch_id}, batch {batch_id}. Stopping training."
 
     # Cleanup and close the progress bar 
-    #progress_bar.close()
+    progress_bar.close()
     
     # Return the average loss for this epoch
     return epoch_loss / (batch_id + 1)
