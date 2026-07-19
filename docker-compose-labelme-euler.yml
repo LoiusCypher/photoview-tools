@@ -1,0 +1,23 @@
+services:
+  labelme:
+    image: labelme
+    build:
+      context: .
+      dockerfile: Dockerfile.labelme-euler
+      target: labelme.euler.local
+    privileged: true
+    entrypoint: labelme
+    hostname: photoview-labelme
+    container_name: labelme
+    restart: Never # unless-stopped
+    #environment:
+      #XDG_RUNTIME_DIR: "/tmp/Wayland-runtime-root"
+      #WAYLAND_DISPLAY: "wayland-0"
+      #QT_WAYLAND_SHELL_INTEGRATION: "xdg-shell"
+      #QT_QPA_PLATFORM: "wayland"
+      #XDG_SESSION_TYPE: "wayland"
+
+    volumes:
+      - "/run/user/1000/wayland-0:/tmp/runtime-root/wayland-0:rw,z"
+      - "./app:/root/workdir"
+

@@ -1,0 +1,31 @@
+ARG BASE=openeuler/openeuler:latest # 24.03-lts-sp1
+FROM ${BASE} AS labelme.euler.local
+#ARG VERSION=2.20.0
+
+RUN dnf update -y
+RUN dnf install -y qt5-qtwayland xdg-utils dbus-x11
+RUN dnf install -y python3-pip
+RUN dnf install -y libxcb libGL mesa-libGL-devel
+RUN dnf install -y git
+RUN dnf clean all
+RUN rm -rf /tmp/*
+RUN rm -rf /var/cache/dnf
+RUN echo Done
+
+# apt install -y qtwayland5 xdg-utils dbus-x11 libxcb-cursor0 libxcb-glx0 libgl1-mesa-dev
+
+RUN pip3 install labelme>=7.0.5
+COPY app /app
+WORKDIR /app
+#RUN pip3 install -r requirements.txt
+
+ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+ENV XDG_SESSION_TYPE=wayland
+ENV WAYLAND_DISPLAY=wayland-0
+ENV QT_WAYLAND_SHELL_INTEGRATION=xdg-shell
+ENV QT_QPA_PLATFORM=wayland
+
+RUN mkdir -p $XDG_RUNTIME_DIR
+
+ENTRYPOINT bash
+
