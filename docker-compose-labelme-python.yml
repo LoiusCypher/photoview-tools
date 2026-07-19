@@ -1,0 +1,18 @@
+services:
+  labelme:
+    image: labelme
+    build:
+      context: .
+      dockerfile: Dockerfile.labelme-python
+      target: labelme.python.local
+    privileged: true
+    hostname: photoview-labelme
+    container_name: labelme
+    restart: Never # unless-stopped
+    #environment:
+      #XDG_RUNTIME_DIR: "/tmp/Wayland-runtime-root"
+      #WAYLAND_DISPLAY: "wayland-0"
+    volumes:
+      - "/run/user/1000/wayland-0:/tmp/runtime-root/wayland-0:rw,z"
+      - "/home/helmut/Downloads/LAV_NRW--Abt_Rheinland--PA_3103--29568:/app/LAV:rw"
+

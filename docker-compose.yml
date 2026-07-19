@@ -14,8 +14,10 @@ services:
     environment:
       PHOTOVIEW_MYSQL_URL: "${MARIADB_USER}:${MARIADB_PASSWORD}@tcp(photoview-mariadb)/${MARIADB_DATABASE}"
       PHOTOVIEW_LISTEN_IP: "0.0.0.0"
+      XDG_RUNTIME_DIR: "/tmp/Wayland-runtime-root"
     volumes:
       - "/home/helmut/pod-dev/photoview-tools/app:/app:z"
+      - ":$XDG_RUNTIME_DIR:z"
       - "/etc/localtime:/etc/localtime:ro" ## use local time from host
       - "/etc/timezone:/etc/timezone:ro"   ## use timezone from host
       - "${HOST_PHOTOVIEW_LOCATION}/database:/home/photoview/database"
