@@ -360,7 +360,7 @@ def run_inference(model, dataloader, batches_cnt):
 import math
 from tqdm.auto import tqdm
 
-debug_loss=True
+debug_loss=False
 
 def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_training):
     """
@@ -404,7 +404,6 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
         
         if debug_loss:
             for key, val in losses.items():
-                #print( ' ', key, val, sum(val))
                 print( ' ', key, val)
 
         # Compute the loss
@@ -444,7 +443,7 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
             progress_bar_dict.update(lr=lr_scheduler.get_last_lr()[0])
         progress_bar.set_postfix(progress_bar_dict)
         progress_bar.update()
-        print('batch', batch_id, 'done')
+        #print('batch', batch_id, 'done')
 
         # If loss is NaN or infinity, stop training
         if is_training:

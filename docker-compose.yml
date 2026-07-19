@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile
       target: retinarcnn
     command: python3 /app/ScanPhotoviewWithMaskRCNN.py
+    privileged: true
     hostname: photoview-objectdetector
     container_name: photoview-objectdetector
     restart: Never # unless-stopped
@@ -14,10 +15,13 @@ services:
     environment:
       PHOTOVIEW_MYSQL_URL: "${MARIADB_USER}:${MARIADB_PASSWORD}@tcp(photoview-mariadb)/${MARIADB_DATABASE}"
       PHOTOVIEW_LISTEN_IP: "0.0.0.0"
-      XDG_RUNTIME_DIR: "/tmp/Wayland-runtime-root"
+      #XDG_RUNTIME_DIR: "/tmp/Wayland-runtime-root"
+      #WAYLAND_DISPLAY: "wayland-0"
     volumes:
       - "/home/helmut/pod-dev/photoview-tools/app:/app:z"
-      - ":$XDG_RUNTIME_DIR:z"
+      #- "/run/user/1000:$XDG_RUNTIME_DIR:z"
+      #- "/run/user/1000/$WAYLAND_DISPLAY:/tmp/Wayland-runtime-root/$WAYLAND_DISPLAY:rw"
+      - "/run/user/1000/wayland-0:/tmp/runtime-root/wayland-0:rw,z"
       - "/etc/localtime:/etc/localtime:ro" ## use local time from host
       - "/etc/timezone:/etc/timezone:ro"   ## use timezone from host
       - "${HOST_PHOTOVIEW_LOCATION}/database:/home/photoview/database"

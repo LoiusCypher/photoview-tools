@@ -1,11 +1,11 @@
-ARG BASE=openeuler/openeuler:24.03-lts-sp1
+ARG BASE=openeuler/openeuler:latest # 24.03-lts-sp1
 FROM ${BASE} AS retinarcnn
 #ARG VERSION=2.20.0
 
 RUN dnf update -y \
-    && dnf install -y pqtwayland5 xdg-utils dbus-x11 hatch \
+    && dnf install -y qt5-qtwayland xdg-utils dbus-x11  \
     && dnf install -y python3-pip \
-    && dnf install -y libxcb libGL \
+    && dnf install -y libxcb libGL mesa-libGL-devel \
     && dnf install -y git \
     && dnf install -y mariadb-connector-c-devel gcc python3-devel \
     && dnf install -y mariadb mysql-selinux \
@@ -20,12 +20,13 @@ COPY app /app
 WORKDIR /app
 RUN pip3 install -r requirements.txt
 
+ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+ENV XDG_SESSION_TYPE=wayland
 ENV WAYLAND_DISPLAY=wayland-0
 ENV QT_WAYLAND_SHELL_INTEGRATION=xdg-shell
 ENV QT_QPA_PLATFORM=wayland
-ENV XDG_SESSION_TYPE=wayland
-ENV XDG_RUNTIME_DIR=/tmp/Wayland-runtime-root
+
 RUN mkdir -p $XDG_RUNTIME_DIR
 
-ENTRYPOINT bash
+#ENTRYPOINT bash
 
