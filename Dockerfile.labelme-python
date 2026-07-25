@@ -12,7 +12,6 @@ RUN mkdir -p $XDG_RUNTIME_DIR
 
 WORKDIR /app
 COPY labelme /app/labelme
-#RUN pip3 install labelme==7.0.4
 RUN pip3 install labelme>=7.0.4
 ENTRYPOINT labelme
 

@@ -7,7 +7,7 @@ services:
       target: labelme.python.local
     privileged: true
     hostname: photoview-labelme
-    container_name: labelme
+    container_name: labelme-python
     restart: Never # unless-stopped
     #environment:
       #XDG_RUNTIME_DIR: "/tmp/Wayland-runtime-root"

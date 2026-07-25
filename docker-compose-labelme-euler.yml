@@ -6,9 +6,9 @@ services:
       dockerfile: Dockerfile.labelme-euler
       target: labelme.euler.local
     privileged: true
-    entrypoint: labelme
-    hostname: photoview-labelme
-    container_name: labelme
+    #entrypoint: labelme
+    hostname: labelme
+    container_name: labelme-euler
     restart: Never # unless-stopped
     #environment:
       #XDG_RUNTIME_DIR: "/tmp/Wayland-runtime-root"
@@ -20,4 +20,5 @@ services:
     volumes:
       - "/run/user/1000/wayland-0:/tmp/runtime-root/wayland-0:rw,z"
       - "./app:/root/workdir"
+      - "/home/helmut/Downloads/LAV_NRW--Abt_Rheinland--PA_3103--29568:/app/LAV:rw"
 
