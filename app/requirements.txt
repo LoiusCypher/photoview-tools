@@ -110,6 +110,8 @@ mariadb>=1.1.14           #        works #
 torchtnt>=0.2.4
 tqdm>=4.68.4
 pandas>=3.0.3
+distinctipy>=1.3.4
+PyQt6>=6.11.0
 
 # absl-py==2.4.0
 # asttokens==3.0.1

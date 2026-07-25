@@ -10,24 +10,110 @@ import torchvision
 ##resnet50(weights=None)
 ##resnet50()
 
+import libDloadCoco
+import libDsetCoco
+
 ######## COCO 1 ----------------
 
 from pycocotools.coco import COCO
 from pycocotools import mask as coco_mask
 from torch.utils.data import Dataset
 
-from torchvision.datasets import CocoDetection
+from torchvision.datasets import CocoDetection, wrap_dataset_for_transforms_v2
 #import torchvision.datasets.CocoDetection(root: Union[str, Path], annFile: str, transform: Optional[Callable] = None, target_transform: Optional[Callable] = None, transforms: Optional[Callable] = None)
 
-import keras
-from torchvision.datasets import CocoDetection
+def plot_sample( sample):
+    img, target = sample
+    if isinstance( img, Image.Image):
+        #print( 'img', type(img))
+        #print( 'image', img.size, img.mode, img)
+        img=functional.pil_to_tensor(img)
+        #print( 'img', type(img))
+        #print( 'image', img.shape)
+    #print( 'img', img.type)
+    #print( 'target.keys()', target.keys())
+    #print( 'boxes', target['boxes'])
+    fig = plt.figure(figsize=(10, 8))
+    plt.title( f"Image Target ({img.shape}) ")
+    #print( 'img', img)
+    #pil_mask = create_polygon_boxes( pil_img.size, target['boxes'])
+    #print( 'pil_mask', pil_mask)
+    #plt.imshow(pil_mask)
 
-#cap_val2017_data = CocoDetection(
-    #root="datasets/val2017_extracted/val2017",
-    #annFile="datasets/annotations_trainval2017_extracted/annotations/captions_val2017.json"
-#)
+    draw_bboxes = partial(draw_bounding_boxes, fill=False, width=2, font_size=25)
+
+    pil_labels = target['labels'].tolist()
+    print( 'pil_labels', pil_labels)
+    set_labels = list(set(pil_labels))
+    #print( 'set_labels', set_labels)
+    len_labels = len(set_labels)
+    #print( 'len(set_labels)', len_labels)
+    idx_labels = [set_labels.index(id) for id in pil_labels]
+    #print( 'idx_labels', idx_labels)
+    colors = distinctipy.get_colors(len_labels)
+    #print( 'colors', colors)
+    int_colors = [tuple(int(c*255) for c in colors[idx]) for idx in idx_labels]
+    #print( 'int_colors', int_colors)
+    #txt_labels = [self.coco.loadCats(id)[0]['name'] for id in pil_labels]
+    #print( 'text labels', txt_labels)
+    #txt_labels = [cat['name'] for cat in self.coco.loadCats( pil_labels)]
+    txt_labels = [str(cat) for cat in pil_labels]
+    #print( 'text labels', txt_labels)
+    # Annotate the sample image with labels and bounding boxes
+    annotated_tensor = draw_bboxes(
+        image=img,
+        boxes=target['boxes'], 
+        labels=txt_labels, 
+        colors=int_colors
+    )
+    pil_image = functional.to_pil_image( annotated_tensor, mode='RGB')
+    plt.imshow(pil_image)
+    plt.axis('off')
+    plt.show()
+
+def plot_prediction( image, pred, cat_names=None):
+        for name, pred_val in pred.items():
+                print(f"{name:<20}{len(pred_val)}")
+        print( 'boxes', pred['boxes'])
+        #print( 'image', image.shape, image)
+        fig = plt.figure(figsize=(10, 8))
+        plt.title( f"Image Target ({image.shape}) ")
+        draw_bboxes = partial(draw_bounding_boxes, fill=False, width=2, font_size=25)
+        pil_labels = pred['labels'].tolist()
+        #print( 'pil_labels', pil_labels)
+        pil_scores = pred['scores'].tolist()
+        #print( 'pil_scores', pil_scores)
+        set_labels = list(set(pil_labels))
+        #print( 'set_labels', set_labels)
+        len_labels = len(set_labels)
+        #print( 'len(set_labels)', len_labels)
+        idx_labels = [set_labels.index(id) for id in pil_labels]
+        #print( 'idx_labels', idx_labels)
+        colors = distinctipy.get_colors(len_labels)
+        #print( 'colors', colors)
+        int_colors = [tuple(int(c*255) for c in colors[idx]) for idx in idx_labels]
+        #print( 'int_colors', int_colors)
+        if cat_names is None:
+            txt_labels = [str(cat) for cat in pil_labels]
+        else:
+            txt_labels = [f"{cat_names[cat]} {score:.3f}" for cat, score in zip( pil_labels, pil_scores)]
+        print( 'text labels', txt_labels)
+        # Annotate the sample image with labels and bounding boxes
+        annotated_tensor = draw_bboxes(
+            image=image, 
+            boxes=pred['boxes'], 
+            labels=txt_labels, 
+            colors=int_colors
+        )
+        pil_image = functional.to_pil_image( annotated_tensor, mode='RGB')
+        plt.imshow(pil_image)
+        plt.axis('off')
+        plt.show()
+
+import keras
+
 #print('cap_val2017_data:', cap_val2017_data)
-#dataset_iter = iter(cap_val2017_data)
+#dataset_iter = cap_val2017_data
 #print(next(dataset_iter))
 
 import os
@@ -35,225 +121,135 @@ import torch
 import torchvision.transforms.v2 as T
 from torchvision.io import decode_image
 from torchvision.utils import draw_bounding_boxes
+from torchvision.transforms import functional
+
+import os
+import sys
+
+os.environ["QT_API"] = "PyQt6"
+
+from PyQt6 import QtCore, QtWidgets
+from matplotlib.backends.backend_qtagg import FigureCanvas
+from matplotlib.figure import Figure
+
+class MplCanvas(FigureCanvas):
+
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = fig.add_subplot(111)
+        super().__init__(fig)
+
+
+class MainWindow(QtWidgets.QMainWindow):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Create the maptlotlib FigureCanvas object,
+        # which defines a single set of axes as self.axes.
+        sc = MplCanvas(self, width=5, height=4, dpi=100)
+        sc.axes.plot([0,1,2,3,4], [10,1,20,3,40])
+        self.setCentralWidget(sc)
+
+        self.show()
+
+
+app = QtWidgets.QApplication(sys.argv)
+w = MainWindow()
+app.exec()
+
+transforms = T.Compose(
+    [
+        T.ToImage(),
+#        T.RandomPhotometricDistort(p=1),
+#        T.RandomZoomOut(fill={tv_tensors.Image: (123, 117, 104), "others": 0}),
+#        T.RandomIoUCrop(),
+#        T.RandomHorizontalFlip(p=1),
+        T.SanitizeBoundingBoxes(),
+        T.ToDtype(torch.float32, scale=True),
+    ]
+)
+
+from PIL import Image, ImageDraw
+import matplotlib
+import matplotlib.pyplot as plt
+from functools import partial
+from distinctipy import distinctipy
+from torchvision.models.detection.mask_rcnn import maskrcnn_resnet50_fpn, MaskRCNN_ResNet50_FPN_Weights
 
 image_size = 256 # 513
 
-class COCOSegmentation(Dataset):
-    #CAT_LIST = [0, 5, 2, 16, 9, 44, 6, 3, 17, 62, 21, 67, 18, 19, 4, 1, 64, 20, 63, 7, 72]
-    #NUM_CLASSES = len(CAT_LIST)
-    #NUM_CLASSES = 130
-    #CAT_LIST = [c_idx for c_idx in range(NUM_CLASSES)]
+debug_set=False
+train=False
+coco_torch=True
+model_torch=False
+if True:
+    ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'val', '2017')
+    if coco_torch:
+        coco_set = CocoDetection( root=imagedir, annFile=ann_file, transforms=transforms) # target_transform )
+        #sample = torch_coco_set[0]
+        #img, target = sample
+        #print(f"{type(img) = }\n{type(target) = }\n{type(target[0]) = }\n{target[0].keys() = }")
+        coco_set = wrap_dataset_for_transforms_v2(coco_set, target_keys=("boxes", "labels", "masks"))
+    else:
+        coco_set = libDsetCoco.COCOSegmentation( ann_file, ids_file, imagedir, split='val', image_size=image_size)
+    if debug_set:
+        print(f"{type(coco_set) = }  {len(coco_set) = }")
+        sample = coco_set[0]
+        print(f"{type(sample) = }  {len(sample) = }")
+        img, target = sample
+        #print(f"target {target}")
+        print(f"{type(img) = }\n{type(target) = }\n{target.keys() = }")
+        print(f"{target['boxes'].shape = }\n{target['labels'].shape = }\n{target['masks'].shape = }")
+        #print(f"{type(target['boxes']) = }\n{type(target['labels']) = }\n{type(target['masks']) = }")
+        plot_sample( sample)
 
-    def __init__(self,
-                 image_size=513,
-                 base_dir='coco', # Path.db_root_dir('coco'),
-                 split='train',
-                 year='2017'):
-        super().__init__()
-        assert year == '2017'
-        assert split == 'val' or split == 'train' or split == 'test'
-        self.split = split
-        if split == 'val' or split == 'train':
-            zip_name = f"annotations_trainval{year}.zip"
-        annotdir = keras.utils.get_file(
-            fname=zip_name,
-            origin=f"http://images.cocodataset.org/annotations/{zip_name}",
-            extract=True,
-            archive_format="zip",  # downloaded file format
-            cache_dir=".",  # cache and extract in current directory
-        )
-        ann_file = os.path.join( annotdir, 'annotations/instances_{}{}.json'.format(split, year))
-        #print(ann_file)
-        ids_file = os.path.join( annotdir, 'annotations/{}_ids_{}.pth'.format(split, year))
-        #print(ids_file)
+    data_loader = torch.utils.data.DataLoader(
+        coco_set,
+        batch_size=2,
+        # We need a custom collation function here, since the object detection
+        # models expect a sequence of images and target dictionaries. The default
+        # collation function tries to torch.stack() the individual elements,
+        # which fails in general for object detection, because the number of bounding
+        # boxes varies between the images of the same batch.
+        collate_fn=lambda batch: tuple(zip(*batch)),
+    )
 
-        zip_name=f'{split}{year}.zip'
-        imagedir = keras.utils.get_file(
-            fname=zip_name,
-            origin=f"http://images.cocodataset.org/zips/{zip_name}",
-            extract=True,
-            archive_format="zip",  # downloaded file format
-            cache_dir=".",  # cache and extract in current directory
-        )
-        self.imagedir = os.path.join( imagedir, '{}{}'.format(split, year))
-        #print(self.imagedir)
-        self.coco = COCO(ann_file)
-        cats_ids = self.coco.getCatIds()
-        print( 'Categories count', len(cats_ids)+1, 'max', max(cats_ids))
-        self.NUM_CLASSES = max(cats_ids) + 1
-        self.CAT_LIST = [c_idx for c_idx in range(self.NUM_CLASSES)]
-        #self.coco_mask = mask
-        if os.path.exists(ids_file):
-            self.ids = torch.load(ids_file)
-        else:
-            ids = list(self.coco.imgs.keys())
-            self.ids = self._preprocess(ids, ids_file)
-        self.image_size = image_size
+    if model_torch:
+        category_names = None
+        model = torchvision.models.get_model("maskrcnn_resnet50_fpn_v2", weights=None, weights_backbone=None).train()
+    else:
+               #maskrcnn_resnet50_fpn(                  weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
+        weights = MaskRCNN_ResNet50_FPN_Weights.COCO_V1
+        category_names = weights.meta["categories"]
+        model = maskrcnn_resnet50_fpn( pretrained=True, weights=weights)
 
-    def __getitem__(self, index):
-        _img, _target = self._make_img_gt_point_pair(index)
-        #sample = {'image': _img, 'label': _target}
-        sample = {'image': _img, 'target': _target}
+    if train: # train
+        model.train()
+        for imgs, targets in data_loader:
+            loss_dict = model(imgs, targets)
+            # Put your training logic here
 
-        if self.split == "train":
-            return self.transform_tr(sample)
-        elif self.split == 'val':
-            return self.transform_val(sample)
+            print(f"{[img.shape for img in imgs] = }")
+            print(f"{[type(target) for target in targets] = }")
+            for name, loss_val in loss_dict.items():
+                print(f"{name:<20}{loss_val:.3f}")
+            break
+    else: # inference
+        model.eval()
+        for imgs, targets in data_loader:
+            pred_batch_dict = model(imgs, targets)
+            print( type(pred_batch_dict[0]))
+            for img, pred in zip( imgs, pred_batch_dict):
+            	plot_prediction( img, pred, category_names)
+            for name, pred_val in pred_batch_dict[0].items():
+                #print(f"{name:<20}{pred_val:.3f}")
+                print(f"{name:<20}{len(pred_val)}")
+            break
 
-    from PIL import Image
+    assert False
 
-    def _make_img_gt_point_pair(self, index):
-        coco = self.coco
-        img_id = self.ids[index]
-        img_metadata = coco.loadImgs(img_id)[0]
-        path = img_metadata['file_name']
-        #_img = Image.open(os.path.join(self.imagedir, path)).convert('RGB')
-        _img = decode_image(os.path.join(self.imagedir, path), mode="RGB")
-        #print( '_img', _img, _img.shape)
-        cocotarget = coco.loadAnns(coco.getAnnIds(imgIds=img_id))
-        #_target = Image.fromarray(self._gen_seg_mask(
-        if True:
-            _target = { #
-                'labels': torch.tensor( [ instance['category_id'] for instance in cocotarget ], dtype=torch.long),
-                'masks': self._gen_seg_mask( cocotarget, img_metadata['height'], img_metadata['width']),
-                'boxes': torch.Tensor(
-                         [ [ instance['bbox'][1],
-                             instance['bbox'][0],
-                             instance['bbox'][1]+instance['bbox'][3],
-                             instance['bbox'][0]+instance['bbox'][2]
-                           ] for instance in cocotarget ]
-                ),
-            }
-        if True:
-            # Extract segmentation masks, bounding boxes and labels from annotations
-            boxes = []  # List to store bounding boxes
-            labels = []  # List to store category labels
-            masks = []  # List to store segmentation masks
-            for ann in cocotarget:
-                xmin, ymin, w, h = ann['bbox']  # Get bounding box in COCO format (x, y, width, height)
-                boxes.append([xmin, ymin, xmin + w, ymin + h])  # Append box in (xmin, ymin, xmax, ymax) format
-                labels.append(ann['category_id'])  # Append category ID
-                mask = self.coco.annToMask(ann)  # Convert segmentation to binary mask
-                masks.append(mask)  # Append mask
-            # Convert annotations to PyTorch tensors
-            boxes = torch.as_tensor(boxes, dtype=torch.float32)  # Bounding boxes as float tensors
-            labels = torch.as_tensor(labels, dtype=torch.int64)  # Labels as int64 tensors
-            masks = torch.as_tensor(masks, dtype=torch.uint8)  # Masks as uint8 tensors
-            area = torch.as_tensor([ann['area'] for ann in cocotarget], dtype=torch.float32)  # Area of each object
-            iscrowd = torch.as_tensor([ann.get('iscrowd', 0) for ann in cocotarget], dtype=torch.int64)  # Crowd annotations
-            # store everything in a dictionary
-            _target = {
-                "boxes": boxes,  # Bounding boxes
-                "labels": labels,  # Object labels
-                "masks": masks,  # Segmentation masks
-                "image_id": img_id,  # Image ID
-                "area": area,  # Area of each object
-                "iscrowd": iscrowd  # Crowd flags
-            }
-        #print( '_target', _target, _target.shape)
-        return _img, _target
-
-    def _preprocess(self, ids, ids_file):
-        print("Preprocessing mask, this will take a while. " + \
-              "But don't worry, it only run once for each split.")
-        #tbar = trange(len(ids))
-        tbar = range(len(ids))
-        new_ids = []
-        for i in tbar:
-            img_id = ids[i]
-            cocotarget = self.coco.loadAnns(self.coco.getAnnIds(imgIds=img_id))
-            img_metadata = self.coco.loadImgs(img_id)[0]
-            mask = self._gen_seg_mask(cocotarget, img_metadata['height'], img_metadata['width'])
-            # more than 1k pixels
-            if (mask > 0).sum() > 1000:
-                new_ids.append(img_id)
-            #tbar.set_description('Doing: {}/{}, got {} qualified images'. \
-                                 #format(i, len(ids), len(new_ids)))
-        print('Found number of qualified images: ', len(new_ids))
-        torch.save(new_ids, ids_file)
-        return new_ids
-
-
-    def _gen_seg_mask(self, target, h, w, item='segmentation'):
-    #def _gen_seg_mask(self, target, h, w, item='bbox'):
-        #print('new mask', h, w)
-        #mask = np.zeros((h, w), dtype=np.uint8)
-        mask = torch.zeros((h, w))
-        #coco_mask = self.coco_mask
-        for instance in target:
-            # 'segmentation', 'area', 'iscrowd', 'image_id', 'bbox', 'category_id', 'id'
-            #print(instance.keys())
-            #print( 'image_id', instance['image_id'])
-            #print( f"category_id {instance['category_id']:02d}", end=' ')
-            category_info = self.coco.loadCats(instance['category_id'])
-            category_name = category_info[0]['name']
-            #print( f"cat info {category_info}", end=' ')
-            #print( f"{category_name:10s}", end=' ')
-            #print( f"bbox {instance['bbox']}")
-            #print( 'segmentation', instance['segmentation'])
-            #print( 'area', instance['area'])
-            #print( 'iscrowd', instance['iscrowd'])
-            rle = coco_mask.frPyObjects(instance['segmentation'], h, w)
-            #print("segm rle", rle, 'cat', instance['category_id'], category_name)
-            m = torch.from_numpy(coco_mask.decode(rle))
-            #print("segm mask shspe", m.shape)
-            #print("segm mask", m)
-            cat = instance['category_id']
-            if cat in self.CAT_LIST:
-                c = self.CAT_LIST.index(cat)
-            else:
-                continue
-            if len(m.shape) < 3:
-                mask[:, :] += (mask == 0) * (m * c)
-            else:
-                #mask[:, :] += (mask == 0) * (((np.sum(m, axis=2)) > 0) * c).astype(np.uint8)
-                mask[:, :] += (mask == 0) * (((torch.sum(m, dim=2)) > 0) * c).type(torch.uint8)
-            #print("final mask shape", mask.shape)
-            #print("final mask", mask)
-        return T.ToImage()(mask).type(torch.uint8)
-
-    def transform_val(self, sample):
-        #composed_transforms = transforms.Compose([
-            #tr.FixScaleCrop(crop_size=self.args.crop_size),
-            #tr.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            #tr.ToTensor()])
-        composed_transforms = T.Compose([
-            T.Resize((self.image_size,self.image_size)),
-            T.ToImage(),
-            T.ToDtype(torch.float32, scale=True), 
-        ])
-        #print('transform Image before', sample['image'], sample['image'].shape)
-        #print('transform label before', sample['label'], sample['label'].shape)
-        if False:
-            #trans_lab = composed_transforms(sample['label'])
-            trans_lab = composed_transforms(sample['mask'])
-            print('transform lab', trans_lab, trans_lab.shape)
-        try:
-            keys = sample.keys()
-        except (AttributeError, TypeError):
-            sample = composed_transforms(sample)
-        else: # no exception raised
-            sample['image'] = composed_transforms(sample['image'])
-            #for key in sample['target'].keys():
-                ##print('key', key)
-                #if key == 'masks':
-                    #sample['target'][key] = composed_transforms(sample['target'][key])
-        #print('transform Image after', sample['image'], sample['image'].shape)
-        #print('transform label after', sample['label'], sample['label'].shape)
-        return sample
-
-    def transform_tr(self, sample):
-        composed_transforms = transforms.Compose([
-            tr.RandomHorizontalFlip(),
-            tr.RandomScaleCrop(base_size=self.args.base_size, crop_size=self.args.crop_size),
-            tr.RandomGaussianBlur(),
-            tr.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            tr.ToTensor()])
-
-        return composed_transforms(sample)
-
-    def __len__(self):
-        return len(self.ids)
+import random
 
 
 def coco_collate_fn(batch):
@@ -291,11 +287,14 @@ collate_fn=lambda x: tuple(zip(*x))
 
 from torch.utils.data import DataLoader
 
-coco_set = COCOSegmentation( year='2017', split='val', image_size=image_size)
+ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( split='val', year='2017')
+coco_set = libDsetCoco.COCOSegmentation( ann_file, ids_file, imagedir, split='val', image_size=image_size)
 
 print( 'Dataset size', len(coco_set))
 #print( coco_set.NUM_CLASSES, len(coco_set.CAT_LIST))
 #print( coco_set[0])
+#print( coco_set[0]['image'])
+#coco_set.display_image_target( random.randrange(len(coco_set)))
 
 def print_batch(dataset_iter):
         images, targets = next( iter( dataset_iter))
@@ -312,13 +311,13 @@ def print_batch(dataset_iter):
         #print(targets[1][0].keys())
         print()
 
-batch_size=4
+batch_size=5 # 4
 
 # Create the DataLoader with your collate_fn
 dataset_iter = DataLoader(
     coco_set,
     batch_size=batch_size,
-    shuffle=True,
+    shuffle=False,
     collate_fn=coco_collate_fn
 )
 
@@ -326,36 +325,94 @@ print_batch(dataset_iter)
 
 ######## COCO 1 ================
 
-def run_inference_batch(model, images):
+def run_inference_batch( batch_idx, model, images):
     #print('shape', images[0].shape), targets[0].shape)
+    for elem_idx, image in enumerate( images):
+        coco_set.display_image_target( elem_idx + batch_idx * len(images))
     results = model( images)
     return results
 
-def print_batch_results( batch_idx, batches_cnt, results):
+def print_batch_results( batch_idx, batches_cnt, images, results):
     print('batch loop', batch_idx + 1, '/', batches_cnt, ':', len(results), results[0].keys())
     print('      labels', len(results[0]['labels']), results[0]['labels'])
     print('      scores', len(results[0]['scores']), results[0]['scores'])
-    print('      boxes ', len(results[0]['boxes']), results[0]['boxes'][0])
+    if len(results[0]['boxes']) > 0:
+        print('      boxes ', len(results[0]['boxes']), results[0]['boxes'][0])
+    else:
+        print('      boxes ', len(results[0]['boxes']))
+    #print('      boxes ', len(results[0]['boxes']), results[0]['boxes'][0])
     print('      masks ', len(results[0]['masks']), results[0]['masks'].shape)
+    for i, (image, result) in enumerate( zip( images, results)):
+        display_image_result( i, batch_idx, batches_cnt, image, result)
 
 from torchvision.utils import save_image
 
-def print_batch_targets( batch_idx, images, targets, save_mask=False):
+def print_batch_target_masks( batch_idx, images, targets, save_mask=False):
     for j in range(len(targets)):
-        print('shape', batch_idx, j, targets[j].shape)
-        save_image( images[j], f'./debug/b{batch_idx:04d}_i{j:04d}_b.jpg')
-        non_black_mask = (targets[j] > 1e-5).any(dim=0)
-        targets[j][:, non_black_mask] = 255 # 1.0
+        print('shape', batch_idx, j, targets[j]['masks'].shape)
         if save_mask:
+            save_image( images[j], f'./debug/b{batch_idx:04d}_i{j:04d}_b.jpg')
+            non_black_mask = (targets[j] > 1e-5).any(dim=0)
+            targets[j][:, non_black_mask] = 255 # 1.0
             save_image( targets[j], f'./debug/b{batch_idx:04d}_i{j:04d}_m.png')
 
-def run_inference(model, dataloader, batches_cnt):
+def display_image_result( i, batch_idx, batches_cnt, image, result):
+    print('batch loop', batch_idx + 1, '/', batches_cnt, 'image', i + 1)
+
+    if len(result['boxes']) > 0:
+        print('      boxes ', len(result['boxes']), result['boxes'][0])
+    else:
+        print('      boxes ', len(result['boxes']))
+
+    fig = plt.figure(figsize=(10, 8))
+    plt.title( f"Image Result ({image.shape}) batch {batch_idx+1}/{batches_cnt} elem {i+1}")
+    pil_image = functional.to_pil_image( image, mode='RGB')
+    pil_labels = result['labels'].tolist()
+    draw_bboxes = partial(draw_bounding_boxes, fill=False, width=2, font_size=25)
+    print( 'pil_labels', pil_labels)
+    set_labels = list(set(pil_labels))
+    #print( 'set_labels', set_labels)
+    len_labels = len(set_labels)
+    #print( 'len(set_labels)', len_labels)
+    idx_labels = [set_labels.index(id) for id in pil_labels]
+    #print( 'idx_labels', idx_labels)
+    txt_labels = [coco_set.cat_name(id) if id not in [12, 29, 30, 45, 68, 69, 71, 83] else 'UNKNOWN' for id in pil_labels]
+    print( 'text labels', txt_labels)
+    #txt_labels = [coco_set.coco.loadCats(id)[0]['name'] for id in pil_labels]
+    #try:
+        #txt_labels = [coco_set.cat_name(id) if id not in [29, 68, 69, 71] else 'UNKNOWN' for id in pil_labels]
+    #except:
+        #print('exception', [id for id in pil_labels])
+    #txt_labels2 = [cat['name'] for cat in coco_set.loadCats( pil_labels)]
+    #print( 'text labels', txt_labels, txt_labels2)
+    colors = distinctipy.get_colors(len_labels)
+    #print( 'colors', colors)
+    int_colors = [tuple(int(c*255) for c in colors[idx]) for idx in idx_labels]
+    #print( 'int_colors', int_colors)
+    annotated_tensor = draw_bboxes(
+        image=image, 
+        boxes=result['boxes'], 
+        labels=txt_labels, 
+        colors=int_colors
+    )
+    pil_image = functional.to_pil_image( annotated_tensor, mode='RGB')
+    plt.imshow(pil_image)
+    #fig.figimage(pil_image)
+    plt.axis('off')
+    plt.show()
+    print('      labels', len(result['labels']), [(id, txt) for id, txt in zip( pil_labels, txt_labels)])
+    print('      scores', len(result['scores']), result['scores'])
+    print('      masks ', len(result['masks']), result['masks'].shape)
+    print()
+
+def run_inference_epoch(model, dataloader, batches_cnt):
     for i, (images, targets) in enumerate( dataloader):
-        #print('Batch Loop', i, images, targets)
-        #print('Batch Loop', i, len(images), len(targets))
-        print_batch_targets( i, images, targets, save_mask=True)
-        results = run_inference_batch( model, images)
-        print_batch_results( i, batches_cnt, results)
+        print('Batch Loop', i + 1, 'Images:', len(images), 'Targets:', len(targets))
+        print('Batch Loop', i + 1, images, targets)
+        print_batch_target_masks( i, images, targets, save_mask=False)
+        #coco_set.display_image_target( i)
+        results = run_inference_batch( i, model, images)
+        print_batch_results( i, batches_cnt, images, results)
 
 import math
 from tqdm.auto import tqdm
@@ -464,7 +521,7 @@ if False:
 
 from torchvision.models.detection.mask_rcnn import maskrcnn_resnet50_fpn, MaskRCNN_ResNet50_FPN_Weights
 #maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
-model = maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.COCO_V1)
+model = maskrcnn_resnet50_fpn( pretrained=True, weights=MaskRCNN_ResNet50_FPN_Weights.COCO_V1)
 
 in_features_box = model.roi_heads.box_predictor.cls_score.in_features
 in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
@@ -492,13 +549,13 @@ else:
 model.eval()
 print('before evaluate')
 if False:
-    images, first = next( iter( dataset_iter))
+    images, first = next( dataset_iter)
     results = model( images)
     print('test', len(results), results[0])
 
 batches_cnt = 1 + (len(coco_set) - 1) // batch_size
 
-#run_inference(model, dataset_iter, batches_cnt)
+run_inference_epoch(model, dataset_iter, batches_cnt)
 
 # Learning rate for the model
 lr = 5e-6
