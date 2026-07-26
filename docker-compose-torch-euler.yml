@@ -3,8 +3,8 @@ services:
     image: photoview-tools/objectdetector
     build:
       context: .
-      dockerfile: Dockerfile
-      target: retinarcnn
+      dockerfile: Dockerfile.torch-euler
+      target: retinarcnn-euler
     command: python3 /app/ScanPhotoviewWithMaskRCNN.py
     privileged: true
     hostname: photoview-objectdetector
@@ -33,5 +33,5 @@ services:
       - "/home/helmut/pod-dev/photoview-tools/logs:/Mask-RCNN_model/logs:rw"
       - "/home/helmut/pod-dev/photoview-tools/Mask-RCNN_TF2.14.0:/Mask-RCNN_model:rw"
 #      - "./handwriting/generated:/handwriting/generated:rw"
-      - "/home/helmut/Downloads/LAV:/app/LAV:ro"
+      - "/home/helmut/Downloads/LAV:/app/LAV:rw"
 

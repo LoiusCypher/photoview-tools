@@ -1,5 +1,5 @@
 ARG BASE=openeuler/openeuler:latest # 24.03-lts-sp1
-FROM ${BASE} AS retinarcnn
+FROM ${BASE} AS retinarcnn-euler
 #ARG VERSION=2.20.0
 
 RUN dnf update -y \
