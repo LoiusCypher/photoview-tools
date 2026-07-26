@@ -94,10 +94,10 @@ def plot_prediction( image, pred, cat_names=None):
         int_colors = [tuple(int(c*255) for c in colors[idx]) for idx in idx_labels]
         #print( 'int_colors', int_colors)
         if cat_names is None:
-            txt_labels = [str(cat) for cat in pil_labels]
+            txt_labels = [f"CAT {cat:02d} {score:.3f}" for cat in pil_labels]
         else:
             txt_labels = [f"{cat_names[cat]} {score:.3f}" for cat, score in zip( pil_labels, pil_scores)]
-        print( 'text labels', txt_labels)
+        #print( 'text labels', txt_labels)
         # Annotate the sample image with labels and bounding boxes
         annotated_tensor = draw_bboxes(
             image=image, 
@@ -175,24 +175,101 @@ import matplotlib
 import matplotlib.pyplot as plt
 from functools import partial
 from distinctipy import distinctipy
+from torchvision.models.detection import fasterrcnn_resnet50_fpn, FasterRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import maskrcnn_resnet50_fpn, MaskRCNN_ResNet50_FPN_Weights
+from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+from engine import train_one_epoch, evaluate
+import utils
+ 
+def config_mask_model( model, class_cnt):
+    in_features_box = model.roi_heads.box_predictor.cls_score.in_features
+    in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
+    out_chanels_mask = model.roi_heads.mask_predictor.conv5_mask.out_channels
+    model.roi_heads.box_predictor = MaskRCNNPredictor(in_channels=in_features_box, num_classes=class_cnt)
+    new_in_features_box = model.roi_heads.box_predictor.cls_score.in_features
+    new_in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
+    new_out_chanels_mask = model.roi_heads.mask_predictor.conv5_mask.out_channels
+    print( 'in_features_box', in_features_box, '->', new_in_features_box,
+           'in_features_mask', in_features_mask, '->', new_in_features_mask,
+           'out_chanels_mask', out_chanels_mask, '->', new_out_chanels_mask)
+    return model
+
+def config_fast_model( model, class_cnt):
+    in_features_box = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_channels=in_features_box, num_classes=class_cnt)
+    new_in_features_box = model.roi_heads.box_predictor.cls_score.in_features
+    print( 'in_features_box', in_features_box, '->', new_in_features_box)
+    return model
+
+def my_train_one_epoch(model, optimizer, data_loader, epoch, print_freq, scaler=None):
+    model.train()
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value:.6f}"))
+    header = f"Epoch: [{epoch}]"
+
+    lr_scheduler = None
+    if epoch == 0:
+        warmup_factor = 1.0 / 1000
+        warmup_iters = min(1000, len(data_loader) - 1)
+
+        lr_scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer, start_factor=warmup_factor, total_iters=warmup_iters
+        )
+        for i, (imgs, targets) in enumerate( data_loader):
+            loss_dict = model(imgs, targets)
+            # Put your training logic here
+
+            print(f"batch {i} {[img.shape for img in imgs] = }")
+            print(f"{[type(target) for target in targets] = }")
+            for name, loss_val in loss_dict.items():
+                print(f"{name:<20}{loss_val:.3f}")
+            #break
+        torch.save(model.state_dict(), "datasets/fast/model_weights.pth")
+
+def load_lav_coco(split):
+    assert split == 'train' or split == 'val'
+    ann_file=f'LAV/{split}.json'
+    coco = COCO(ann_file)
+    cats_ids = coco.getCatIds()
+    print( 'Categories count', len(cats_ids), 'max', max(cats_ids))
+    #print(f"{coco.loadCats(cats_ids) = }")
+    category_names = [coco.loadCats([cat])[0]['name'] for cat in cats_ids]
+    coco_set = CocoDetection( root='.', annFile=ann_file, transforms=transforms ) #, target_transform )
+    coco_set = wrap_dataset_for_transforms_v2(coco_set, target_keys=("boxes", "labels", "iscrowd", "image_id"))
+    #print( f"lav_coco {coco_set = } {len(coco_set) = }")
+    #sample = coco_set[0]
+    #img, target = sample
+    #print(f"coco_torch {type(img) = }\n{type(target) = }\n{target.keys() = }\n{target.values() = }")
+    #print()
+    return coco_set, cats_ids, category_names
 
 image_size = 256 # 513
 
 debug_set=False
-train=False
-coco_torch=True
+train=True
+dset='lav_coco' # 'coco_torch' 'own_coco' 'lav_coco'
 model_torch=False
 if True:
-    ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'val', '2017')
-    if coco_torch:
-        coco_set = CocoDetection( root=imagedir, annFile=ann_file, transforms=transforms) # target_transform )
-        #sample = torch_coco_set[0]
-        #img, target = sample
-        #print(f"{type(img) = }\n{type(target) = }\n{type(target[0]) = }\n{target[0].keys() = }")
-        coco_set = wrap_dataset_for_transforms_v2(coco_set, target_keys=("boxes", "labels", "masks"))
-    else:
-        coco_set = libDsetCoco.COCOSegmentation( ann_file, ids_file, imagedir, split='val', image_size=image_size)
+    ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'val', '2014')
+    match dset:
+        case 'coco_torch':
+            coco_set = CocoDetection( root=imagedir, annFile=ann_file, transforms=transforms) # target_transform )
+            sample = coco_set[0]
+            img, target = sample
+            print(f"{type(img) = }\n{type(target) = }\n{type(target[0]) = }\n{target[0].keys() = }")
+            coco_set = CocoDetection( root=imagedir, annFile=ann_file, transforms=transforms) # target_transform )
+            coco_set = wrap_dataset_for_transforms_v2(coco_set, target_keys=("boxes", "labels", "masks"))
+
+        case 'own_coco':
+            coco_set = libDsetCoco.COCOSegmentation( ann_file, ids_file, imagedir, split='val', image_size=image_size)
+
+        case 'lav_coco':
+            coco_set_train, cats_ids_train, category_names_train = load_lav_coco('train')
+            coco_set_val, cats_ids_val, category_names_val = load_lav_coco('val')
+            assert cats_ids_train == cats_ids_val
+            assert category_names_train == category_names_val
+
     if debug_set:
         print(f"{type(coco_set) = }  {len(coco_set) = }")
         sample = coco_set[0]
@@ -200,12 +277,23 @@ if True:
         img, target = sample
         #print(f"target {target}")
         print(f"{type(img) = }\n{type(target) = }\n{target.keys() = }")
-        print(f"{target['boxes'].shape = }\n{target['labels'].shape = }\n{target['masks'].shape = }")
-        #print(f"{type(target['boxes']) = }\n{type(target['labels']) = }\n{type(target['masks']) = }")
+        print(f"{target['boxes'].shape = }\n{target['labels'].shape = }\n{target['image_id'] = }")
+        #print(f"{type(target['boxes']) = }\n{type(target['labels']) = }\n{type(target['image_id']) = }")
         plot_sample( sample)
 
-    data_loader = torch.utils.data.DataLoader(
-        coco_set,
+    train_loader = torch.utils.data.DataLoader(
+        coco_set_train,
+        batch_size=2,
+        # We need a custom collation function here, since the object detection
+        # models expect a sequence of images and target dictionaries. The default
+        # collation function tries to torch.stack() the individual elements,
+        # which fails in general for object detection, because the number of bounding
+        # boxes varies between the images of the same batch.
+        collate_fn=lambda batch: tuple(zip(*batch)),
+    )
+
+    val_loader = torch.utils.data.DataLoader(
+        coco_set_val,
         batch_size=2,
         # We need a custom collation function here, since the object detection
         # models expect a sequence of images and target dictionaries. The default
@@ -219,25 +307,83 @@ if True:
         category_names = None
         model = torchvision.models.get_model("maskrcnn_resnet50_fpn_v2", weights=None, weights_backbone=None).train()
     else:
-               #maskrcnn_resnet50_fpn(                  weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
-        weights = MaskRCNN_ResNet50_FPN_Weights.COCO_V1
-        category_names = weights.meta["categories"]
-        model = maskrcnn_resnet50_fpn( pretrained=True, weights=weights)
+                 #maskrcnn_resnet50_fpn(                  weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
+        #weights = MaskRCNN_ResNet50_FPN_Weights.COCO_V1
+        weights = FasterRCNN_ResNet50_FPN_Weights.COCO_V1
+        #weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+        if dset != 'lav_coco':
+            category_names = weights.meta["categories"]
+        #fasterrcnn_resnet50_fpnmodel = maskrcnn_resnet50_fpn( pretrained=True, weights=weights)
+        model = fasterrcnn_resnet50_fpn( weights=weights)
+        model = config_fast_model( model, 1 + max(cats_ids_train))
+
+def load_checkpoint( checkpath, model, optimizer):
+    checkpoint = torch.load(checkpath, weights_only=True)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch = checkpoint['epoch']
+    #loss = checkpoint['loss']
+    print( "Epoch {epoch} file loaded")
+    return model, optimizer, epoch
+
+
+image_size = 256 # 513
+checkpoint_file = "datasets/fast/model_checkpoint.pth"
+
+debug_set=False
+train=True
+dset='lav_coco' # 'coco_torch' 'own_coco' 'lav_coco'
+model_torch=False
+if True:
+    ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'val', '2014')
 
     if train: # train
         model.train()
-        for imgs, targets in data_loader:
-            loss_dict = model(imgs, targets)
-            # Put your training logic here
 
-            print(f"{[img.shape for img in imgs] = }")
-            print(f"{[type(target) for target in targets] = }")
-            for name, loss_val in loss_dict.items():
-                print(f"{name:<20}{loss_val:.3f}")
-            break
+        # construct an optimizer
+        params = [p for p in model.parameters() if p.requires_grad]
+        optimizer = torch.optim.SGD(
+            params,
+            lr=0.005,
+            momentum=0.9,
+            weight_decay=0.0005
+        )
+
+        next_epoch = 0
+        if os.path.isfile( checkpoint_file):
+            model, optimizer, last_epoch = load_checkpoint( checkpoint_file, model, optimizer)
+            next_epoch = last_epoch + 1
+            print( f"{next_epoch = }")
+
+        # Set the number of epochs for training
+        num_epochs = 30
+
+        # Loop through each epoch
+        for epoch in range(next_epoch, next_epoch+num_epochs):
+            print(f"\nEpoch {epoch + 1}/{next_epoch+num_epochs}")
+
+            # Train the model for one epoch, printing status every 25 iterations
+            #my_train_one_epoch(model, optimizer, train_loader, epoch, print_freq=5)  # Using train_loader for training
+            train_one_epoch(model, optimizer, train_loader, torch.device("cpu"), epoch, print_freq=5)  # Using train_loader for training
+
+            # Evaluate the model on the validation dataset
+            evaluate(model, val_loader, device=torch.device("cpu"))  # Using val_loader for evaluation
+
+            # Optionally, save the model checkpoint after each epoch
+            #torch.save(model.state_dict(), f"datasets/fast/model_epoch_{epoch + 1}.pth")
+            if os.path.isfile( checkpoint_file):
+                os.rename( checkpoint_file, os.path.join( os.path.dirname(checkpoint_file), f"model_checkpoint_epoch_{epoch:03d}.pth"))
+                print( f"renamed model_checkpoint_epoch_{epoch = }")
+            torch.save({
+                        'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        }, checkpoint_file)
+            print( f"saved {epoch+1 = }")
+
     else: # inference
         model.eval()
-        for imgs, targets in data_loader:
+        for imgs, targets in val_loader:
             pred_batch_dict = model(imgs, targets)
             print( type(pred_batch_dict[0]))
             for img, pred in zip( imgs, pred_batch_dict):
@@ -247,7 +393,8 @@ if True:
                 print(f"{name:<20}{len(pred_val)}")
             break
 
-    assert False
+    #assert False
+assert False
 
 import random
 
@@ -523,25 +670,11 @@ from torchvision.models.detection.mask_rcnn import maskrcnn_resnet50_fpn, MaskRC
 #maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
 model = maskrcnn_resnet50_fpn( pretrained=True, weights=MaskRCNN_ResNet50_FPN_Weights.COCO_V1)
 
-in_features_box = model.roi_heads.box_predictor.cls_score.in_features
-in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
-out_chanels_mask = model.roi_heads.mask_predictor.conv5_mask.out_channels
-
-from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-if True:
-    #coco_set.NUM_CLASSES = 4
-    print( 'NUM_CLASSES', coco_set.NUM_CLASSES)
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_channels=in_features_box, num_classes=coco_set.NUM_CLASSES)
-    model.roi_heads.mask_predictor = MaskRCNNPredictor(in_channels=in_features_mask, dim_reduced=min(256,out_chanels_mask), num_classes=coco_set.NUM_CLASSES)
-    new_in_features_box = model.roi_heads.box_predictor.cls_score.in_features
-    new_in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
-    new_out_chanels_mask = model.roi_heads.mask_predictor.conv5_mask.out_channels
-    print( 'in_features_box', in_features_box, '->', new_in_features_box,
-           'in_features_mask', in_features_mask, '->', new_in_features_mask,
-           'out_chanels_mask', out_chanels_mask, '->', new_out_chanels_mask)
+if true:
+    model = config_fast_model( model, coco_set.NUM_CLASSES)
 else:
     print( 'in_features_box', in_features_box, 'in_features_mask', in_features_mask, 'out_chanels_mask', out_chanels_mask)
+
 
 #from torchtnt.utils import get_module_summary
 #print( get_module_summary(model.eval(), [torch.randn(1, 3, 256, 256)]))

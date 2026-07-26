@@ -19,6 +19,8 @@ RUN sed -i -e "s:np\.bool:bool:g" /Mask-RCNN_model/mrcnn/utils.py
 COPY app /app
 WORKDIR /app
 RUN pip3 install -r requirements.txt
+RUN pip3 install "labelme>=6.3.1" labelme2coco
+#RUN pip3 install "labelme>=7.0.4" labelme2coco
 
 ENV XDG_RUNTIME_DIR=/tmp/runtime-root
 ENV XDG_SESSION_TYPE=wayland
@@ -28,5 +30,4 @@ ENV QT_QPA_PLATFORM=wayland
 
 RUN mkdir -p $XDG_RUNTIME_DIR
 
-#ENTRYPOINT bash
 

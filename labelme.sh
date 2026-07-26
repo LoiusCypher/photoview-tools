@@ -5,6 +5,12 @@
 #sudo docker compose -f docker-compose-labelme-euler.yml run labelme
 #
 # sudo is required
-sudo docker compose -f docker-compose-labelme-python.yml build labelme
-sudo docker compose -f docker-compose-labelme-python.yml run labelme
-
+#sudo docker compose -f docker-compose-labelme-python.yml build labelme
+#sudo docker compose -f docker-compose-labelme-python.yml run labelme
+#sudo docker compose -f docker-compose-labelme-python.yml run labelme rm -f LAV/dataset.json
+#sudo docker compose -f docker-compose-labelme-python.yml run labelme labelme2coco LAV LAV
+#
+sudo docker compose -f docker-compose-torch-python.yml run objectdetector labelme
+sudo docker compose -f docker-compose-torch-python.yml run objectdetector mv LAV/train.json LAV/train.old
+sudo docker compose -f docker-compose-torch-python.yml run objectdetector mv LAV/val.json LAV/val.old
+sudo docker compose -f docker-compose-torch-python.yml run objectdetector labelme2coco LAV LAV  --train_split_rate 0.85 --category_id_start 1

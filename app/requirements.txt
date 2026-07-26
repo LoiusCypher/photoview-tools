@@ -104,7 +104,8 @@ tensorflow>=2.20.0        #        works # orig             tensorflow==2.14.0
 #torch>=2.13.0+cpu
 #torchvision>=0.28.0+cpu
 torch==2.12.1
-torchvision>=0.27.1+xpu
+#torchvision>=0.27.1+xpu
+torchvision>=0.27.1
 mariadb>=1.1.14           #        works #
 
 torchtnt>=0.2.4

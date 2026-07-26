@@ -1,0 +1,26 @@
+ARG BASE=python:3.12-trixie
+FROM ${BASE} AS retinarcnn-python
+
+RUN apt update && apt upgrade -y && apt install -y qtwayland5 xdg-utils dbus-x11 libxcb-cursor0 libxcb-glx0 libgl1-mesa-dev
+RUN apt install -y git mariadb-client gcc # mariadb-connector-c-devel python3-devel 
+RUN pip3 install --upgrade pip
+
+#    && dnf install -y mysql-selinux \
+
+RUN git clone https://github.com/LoiusCypher/Mask-RCNN_TF2.14.0.git /Mask-RCNN_model
+
+RUN sed -i -e "s:np\.bool:bool:g" /Mask-RCNN_model/mrcnn/utils.py
+COPY app /app
+COPY labelme /app/labelme
+WORKDIR /app
+RUN pip3 install -r requirements.txt
+RUN pip3 install "labelme>=7.0.4" labelme2coco
+
+ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+ENV XDG_SESSION_TYPE=wayland
+ENV WAYLAND_DISPLAY=wayland-0
+ENV QT_WAYLAND_SHELL_INTEGRATION=xdg-shell
+ENV QT_QPA_PLATFORM=wayland
+
+RUN mkdir -p $XDG_RUNTIME_DIR
+

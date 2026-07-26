@@ -14,5 +14,5 @@ services:
       #WAYLAND_DISPLAY: "wayland-0"
     volumes:
       - "/run/user/1000/wayland-0:/tmp/runtime-root/wayland-0:rw,z"
-      - "/home/helmut/Downloads/LAV_NRW--Abt_Rheinland--PA_3103--29568:/app/LAV:rw"
+      - "/home/helmut/Downloads/LAV:/app/LAV:rw"
 

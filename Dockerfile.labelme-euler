@@ -11,8 +11,7 @@ RUN rm -rf /tmp/*
 RUN rm -rf /var/cache/dnf
 RUN echo Done
 
-RUN pip3 install labelme>=7.0.5
-#COPY app /app
+RUN pip3 install 'labelme>=7.0.4' labelme2coco
 COPY labelme /app/labelme
 WORKDIR /app
 
@@ -23,7 +22,7 @@ ENV QT_WAYLAND_SHELL_INTEGRATION=xdg-shell
 ENV QT_QPA_PLATFORM=wayland
 RUN mkdir -p $XDG_RUNTIME_DIR
 
-ENTRYPOINT labelme
+CMD labelme
 
 ENV RUN_OPT_BASE="--json --image /app/labelme/0000-LAV_NRW_R_PA_3103_29568_0007.jpg"
 ENV RUN_OPT_TEXT="{\"texts\": [\"cat\"]}"
