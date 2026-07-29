@@ -71,16 +71,16 @@ def plot_sample( sample):
     plt.axis('off')
     plt.show()
 
-def plot_prediction( image, pred, cat_names=None):
+def plot_prediction( image, pred, cat_names=None, epoch=None, file_name=None):
         for name, pred_val in pred.items():
                 print(f"{name:<20}{len(pred_val)}")
         print( 'boxes', pred['boxes'])
-        #print( 'image', image.shape, image)
+        print( 'image', image.shape, image)
         fig = plt.figure(figsize=(10, 8))
         plt.title( f"Image Target ({image.shape}) ")
-        draw_bboxes = partial(draw_bounding_boxes, fill=False, width=2, font_size=25)
+        draw_bboxes = partial(draw_bounding_boxes, fill=False, width=2, font_size=max(image.shape[1]//40,25))
         pil_labels = pred['labels'].tolist()
-        #print( 'pil_labels', pil_labels)
+        print( f'{pil_labels = }')
         pil_scores = pred['scores'].tolist()
         #print( 'pil_scores', pil_scores)
         set_labels = list(set(pil_labels))
@@ -96,18 +96,20 @@ def plot_prediction( image, pred, cat_names=None):
         if cat_names is None:
             txt_labels = [f"CAT {cat:02d} {score:.3f}" for cat in pil_labels]
         else:
-            txt_labels = [f"{cat_names[cat]} {score:.3f}" for cat, score in zip( pil_labels, pil_scores)]
+            txt_labels = [f"{cat_names[cat-1]} {score:.3f}" for cat, score in zip( pil_labels, pil_scores)]
         #print( 'text labels', txt_labels)
         # Annotate the sample image with labels and bounding boxes
         annotated_tensor = draw_bboxes(
             image=image, 
             boxes=pred['boxes'], 
             labels=txt_labels, 
-            colors=int_colors
+            colors=int_colors,
         )
         pil_image = functional.to_pil_image( annotated_tensor, mode='RGB')
         plt.imshow(pil_image)
         plt.axis('off')
+        if epoch != None:
+            pil_image.save( f"Test-Images/Epoch-{epoch:04d}-{file_name}.png")
         plt.show()
 
 import keras
@@ -248,6 +250,7 @@ image_size = 256 # 513
 
 debug_set=False
 train=True
+testing=False
 dset='lav_coco' # 'coco_torch' 'own_coco' 'lav_coco'
 model_torch=False
 if True:
@@ -269,6 +272,9 @@ if True:
             coco_set_val, cats_ids_val, category_names_val = load_lav_coco('val')
             assert cats_ids_train == cats_ids_val
             assert category_names_train == category_names_val
+            category_names = category_names_train 
+            cats_ids = cats_ids_train
+            num_classes = 1 + max(cats_ids)
 
     if debug_set:
         print(f"{type(coco_set) = }  {len(coco_set) = }")
@@ -315,25 +321,30 @@ if True:
             category_names = weights.meta["categories"]
         #fasterrcnn_resnet50_fpnmodel = maskrcnn_resnet50_fpn( pretrained=True, weights=weights)
         model = fasterrcnn_resnet50_fpn( weights=weights)
-        model = config_fast_model( model, 1 + max(cats_ids_train))
 
-def load_checkpoint( checkpath, model, optimizer):
+def load_checkpoint( checkpath, model, optimizer=None, loss=None):
     checkpoint = torch.load(checkpath, weights_only=True)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
-    #loss = checkpoint['loss']
+    class_cnt = checkpoint['categories']
+    model = config_fast_model( model, class_cnt)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    if loss is not None:
+        loss = checkpoint['loss']
     print( "Epoch {epoch} file loaded")
-    return model, optimizer, epoch
+    return model, epoch, class_cnt, optimizer
 
 
 image_size = 256 # 513
 checkpoint_file = "datasets/fast/model_checkpoint.pth"
 
 debug_set=False
-train=True
 dset='lav_coco' # 'coco_torch' 'own_coco' 'lav_coco'
 model_torch=False
+# Set the number of epochs for training
+num_epochs = 300
+
 if True:
     ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'val', '2014')
 
@@ -351,12 +362,12 @@ if True:
 
         next_epoch = 0
         if os.path.isfile( checkpoint_file):
-            model, optimizer, last_epoch = load_checkpoint( checkpoint_file, model, optimizer)
+            model, last_epoch, class_cnt, optimizer = load_checkpoint( checkpoint_file, model, optimizer)
             next_epoch = last_epoch + 1
-            print( f"{next_epoch = }")
-
-        # Set the number of epochs for training
-        num_epochs = 30
+            print( f"{next_epoch = } {class_cnt = }")
+            if class_cnt != num_classes:
+                print( f"Change model to {num_classes = }")
+                model = config_fast_model( model, num_classes)
 
         # Loop through each epoch
         for epoch in range(next_epoch, next_epoch+num_epochs):
@@ -376,18 +387,24 @@ if True:
                 print( f"renamed model_checkpoint_epoch_{epoch = }")
             torch.save({
                         'epoch': epoch,
+                        'categories': num_classes,
                         'model_state_dict': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         }, checkpoint_file)
             print( f"saved {epoch+1 = }")
 
     else: # inference
+        next_epoch = 0
+        if os.path.isfile( checkpoint_file):
+            model, last_epoch, class_cnt, optimizer = load_checkpoint( checkpoint_file, model)
+            print( f"{last_epoch = }")
+
         model.eval()
         for imgs, targets in val_loader:
             pred_batch_dict = model(imgs, targets)
             print( type(pred_batch_dict[0]))
             for img, pred in zip( imgs, pred_batch_dict):
-            	plot_prediction( img, pred, category_names)
+            	plot_prediction( img, pred, category_names, epoch=last_epoch, file_name='x')
             for name, pred_val in pred_batch_dict[0].items():
                 #print(f"{name:<20}{pred_val:.3f}")
                 print(f"{name:<20}{len(pred_val)}")
@@ -503,7 +520,7 @@ def print_batch_target_masks( batch_idx, images, targets, save_mask=False):
             targets[j][:, non_black_mask] = 255 # 1.0
             save_image( targets[j], f'./debug/b{batch_idx:04d}_i{j:04d}_m.png')
 
-def display_image_result( i, batch_idx, batches_cnt, image, result):
+def display_image_result( i, batch_idx, batches_cnt, image, result, epoch=None, file_name=None):
     print('batch loop', batch_idx + 1, '/', batches_cnt, 'image', i + 1)
 
     if len(result['boxes']) > 0:
@@ -545,7 +562,10 @@ def display_image_result( i, batch_idx, batches_cnt, image, result):
     pil_image = functional.to_pil_image( annotated_tensor, mode='RGB')
     plt.imshow(pil_image)
     #fig.figimage(pil_image)
+    
     plt.axis('off')
+    if epoch != None:
+        plt.savefig( f"Test-Images/Epoch-{epoch:04d}-{file_name}.png")
     plt.show()
     print('      labels', len(result['labels']), [(id, txt) for id, txt in zip( pil_labels, txt_labels)])
     print('      scores', len(result['scores']), result['scores'])
@@ -670,10 +690,7 @@ from torchvision.models.detection.mask_rcnn import maskrcnn_resnet50_fpn, MaskRC
 #maskrcnn_resnet50_fpn(weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
 model = maskrcnn_resnet50_fpn( pretrained=True, weights=MaskRCNN_ResNet50_FPN_Weights.COCO_V1)
 
-if true:
-    model = config_fast_model( model, coco_set.NUM_CLASSES)
-else:
-    print( 'in_features_box', in_features_box, 'in_features_mask', in_features_mask, 'out_chanels_mask', out_chanels_mask)
+print( 'in_features_box', in_features_box, 'in_features_mask', in_features_mask, 'out_chanels_mask', out_chanels_mask)
 
 
 #from torchtnt.utils import get_module_summary
