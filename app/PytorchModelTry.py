@@ -75,10 +75,10 @@ def plot_prediction( image, pred, cat_names=None, epoch=None, file_name=None):
         for name, pred_val in pred.items():
                 print(f"{name:<20}{len(pred_val)}")
         print( 'boxes', pred['boxes'])
-        print( 'image', image.shape, image)
+        print( f'image {image.shape = }')
         fig = plt.figure(figsize=(10, 8))
         plt.title( f"Image Target ({image.shape}) ")
-        draw_bboxes = partial(draw_bounding_boxes, fill=False, width=2, font_size=max(image.shape[1]//40,25))
+        draw_bboxes = partial(draw_bounding_boxes, fill=False, width=2, font_size=max(image.shape[1]//30,25))
         pil_labels = pred['labels'].tolist()
         print( f'{pil_labels = }')
         pil_scores = pred['scores'].tolist()
@@ -94,9 +94,9 @@ def plot_prediction( image, pred, cat_names=None, epoch=None, file_name=None):
         int_colors = [tuple(int(c*255) for c in colors[idx]) for idx in idx_labels]
         #print( 'int_colors', int_colors)
         if cat_names is None:
-            txt_labels = [f"CAT {cat:02d} {score:.3f}" for cat in pil_labels]
+            txt_labels = [f"CAT {cat:02d}  {score:.2f}" for cat in pil_labels]
         else:
-            txt_labels = [f"{cat_names[cat-1]} {score:.3f}" for cat, score in zip( pil_labels, pil_scores)]
+            txt_labels = [f"{cat_names[cat-1]}  {score:.2f}" for cat, score in zip( pil_labels, pil_scores)]
         #print( 'text labels', txt_labels)
         # Annotate the sample image with labels and bounding boxes
         annotated_tensor = draw_bboxes(
@@ -127,6 +127,7 @@ from torchvision.transforms import functional
 
 import os
 import sys
+import argparse
 
 os.environ["QT_API"] = "PyQt6"
 
@@ -160,18 +161,6 @@ app = QtWidgets.QApplication(sys.argv)
 w = MainWindow()
 app.exec()
 
-transforms = T.Compose(
-    [
-        T.ToImage(),
-#        T.RandomPhotometricDistort(p=1),
-#        T.RandomZoomOut(fill={tv_tensors.Image: (123, 117, 104), "others": 0}),
-#        T.RandomIoUCrop(),
-#        T.RandomHorizontalFlip(p=1),
-        T.SanitizeBoundingBoxes(),
-        T.ToDtype(torch.float32, scale=True),
-    ]
-)
-
 from PIL import Image, ImageDraw
 import matplotlib
 import matplotlib.pyplot as plt
@@ -201,7 +190,7 @@ def config_fast_model( model, class_cnt):
     in_features_box = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_channels=in_features_box, num_classes=class_cnt)
     new_in_features_box = model.roi_heads.box_predictor.cls_score.in_features
-    print( 'in_features_box', in_features_box, '->', new_in_features_box)
+    print( f"{in_features_box = } -> {new_in_features_box = } / {class_cnt = }")
     return model
 
 def my_train_one_epoch(model, optimizer, data_loader, epoch, print_freq, scaler=None):
@@ -246,26 +235,65 @@ def load_lav_coco(split):
     #print()
     return coco_set, cats_ids, category_names
 
-image_size = 256 # 513
+transforms = T.Compose(
+    [
+        T.ToImage(),
+#        T.RandomPhotometricDistort(p=1),
+#        T.RandomZoomOut(fill={tv_tensors.Image: (123, 117, 104), "others": 0}),
+#        T.RandomIoUCrop(),
+#        T.RandomHorizontalFlip(p=1),
+        T.SanitizeBoundingBoxes(),
+        T.ToDtype(torch.float32, scale=True),
+    ]
+)
 
-debug_set=False
-train=True
-testing=False
-dset='lav_coco' # 'coco_torch' 'own_coco' 'lav_coco'
-model_torch=False
-if True:
-    ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'val', '2014')
+def load_checkpoint( checkpath, model, optimizer=None, loss=None):
+    checkpoint = torch.load(checkpath, weights_only=True)
+    epoch = checkpoint['epoch']
+    class_cnt = checkpoint['categories']
+    model = config_fast_model( model, class_cnt)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    if loss is not None:
+        loss = checkpoint['loss']
+    print( "Epoch {epoch} file loaded")
+    return model, epoch, class_cnt, optimizer
+
+def load_checkpoint_test( mask_model, checkpoint_file):
+    assert os.path.isfile( checkpoint_file)
+    checkpoint = torch.load( checkpoint_file, weights_only=True)
+    category_names = checkpoint['classes']
+    print( f"{category_names = }")
+    model, category_names = load_model( mask_model, category_names, load_weights=False)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    epoch = checkpoint['epoch']
+    print( "Epoch {epoch} file loaded")
+    return model, epoch, category_names
+
+def load_categories(dset):
     match dset:
         case 'coco_torch':
+            ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'train', '2014')
             coco_set = CocoDetection( root=imagedir, annFile=ann_file, transforms=transforms) # target_transform )
-            sample = coco_set[0]
-            img, target = sample
-            print(f"{type(img) = }\n{type(target) = }\n{type(target[0]) = }\n{target[0].keys() = }")
+            #sample = coco_set[0]
+            #img, target = sample
+            #print(f"{type(img) = }\n{type(target) = }\n{type(target[0]) = }\n{target[0].keys() = }")
+            coco_set_train = wrap_dataset_for_transforms_v2(coco_set, target_keys=("boxes", "labels", "masks"))
+            ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'val', '2014')
             coco_set = CocoDetection( root=imagedir, annFile=ann_file, transforms=transforms) # target_transform )
-            coco_set = wrap_dataset_for_transforms_v2(coco_set, target_keys=("boxes", "labels", "masks"))
+            #sample = coco_set[0]
+            #img, target = sample
+            #print(f"{type(img) = }\n{type(target) = }\n{type(target[0]) = }\n{target[0].keys() = }")
+            coco_set_val = wrap_dataset_for_transforms_v2(coco_set, target_keys=("boxes", "labels", "masks"))
 
         case 'own_coco':
-            coco_set = libDsetCoco.COCOSegmentation( ann_file, ids_file, imagedir, split='val', image_size=image_size)
+            image_size = 256 # 513
+            ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'train', '2014')
+            coco_set_train = libDsetCoco.COCOSegmentation( ann_file, ids_file, imagedir, split='train', image_size=image_size)
+            ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'val', '2014')
+            coco_set_val = libDsetCoco.COCOSegmentation( ann_file, ids_file, imagedir, split='val', image_size=image_size)
 
         case 'lav_coco':
             coco_set_train, cats_ids_train, category_names_train = load_lav_coco('train')
@@ -275,8 +303,11 @@ if True:
             category_names = category_names_train 
             cats_ids = cats_ids_train
             num_classes = 1 + max(cats_ids)
+    return category_names, cats_ids, num_classes, coco_set_train, coco_set_val
 
-    if debug_set:
+def load_dloader(dset):
+    category_names, cats_ids, num_classes, coco_set_train, coco_set_val = load_categories(dset)
+    if False:
         print(f"{type(coco_set) = }  {len(coco_set) = }")
         sample = coco_set[0]
         print(f"{type(sample) = }  {len(sample) = }")
@@ -297,7 +328,6 @@ if True:
         # boxes varies between the images of the same batch.
         collate_fn=lambda batch: tuple(zip(*batch)),
     )
-
     val_loader = torch.utils.data.DataLoader(
         coco_set_val,
         batch_size=2,
@@ -308,112 +338,150 @@ if True:
         # boxes varies between the images of the same batch.
         collate_fn=lambda batch: tuple(zip(*batch)),
     )
+    return category_names, cats_ids, num_classes, train_loader, val_loader
 
-    if model_torch:
-        category_names = None
-        model = torchvision.models.get_model("maskrcnn_resnet50_fpn_v2", weights=None, weights_backbone=None).train()
+def get_test_files(root_dir):
+    test_files = []
+    for root, dirs, files in os.walk(root_dir):
+        for file in files:
+            if file.lower().endswith(('.jpeg', '.jpg')):
+                test_files.append( os.path.join( root, file))
+    #print( f"{test_files = }")
+    return test_files
+
+def load_model( mask_model, category_names=None, load_weights=True):
+    if mask_model:
+        model = torchvision.models.get_model("maskrcnn_resnet50_fpn_v2", weights=None, weights_backbone=None)
     else:
-                 #maskrcnn_resnet50_fpn(                  weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
-        #weights = MaskRCNN_ResNet50_FPN_Weights.COCO_V1
-        weights = FasterRCNN_ResNet50_FPN_Weights.COCO_V1
-        #weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
-        if dset != 'lav_coco':
-            category_names = weights.meta["categories"]
-        #fasterrcnn_resnet50_fpnmodel = maskrcnn_resnet50_fpn( pretrained=True, weights=weights)
-        model = fasterrcnn_resnet50_fpn( weights=weights)
+        if load_weights:
+                     #maskrcnn_resnet50_fpn(                  weights=MaskRCNN_ResNet50_FPN_Weights.DEFAULT)
+            #weights = MaskRCNN_ResNet50_FPN_Weights.COCO_V1
+            weights = FasterRCNN_ResNet50_FPN_Weights.COCO_V1
+            #weights = FasterRCNN_ResNet50_FPN_Weights.DEFAULT
+            if category_names == None:
+                category_names = weights.meta["categories"]
+            #fasterrcnn_resnet50_fpnmodel = maskrcnn_resnet50_fpn( pretrained=True, weights=weights)
+            model = fasterrcnn_resnet50_fpn( weights=weights, num_classes=1+len(category_names))
+            #model = config_fast_model( model, 1+len(category_names))
+        else:
+            assert category_names != None
+            model = fasterrcnn_resnet50_fpn( num_classes=1+len(category_names))
+            print( f"Model loaded", 1+len(category_names))
+            model = config_fast_model( model, 1+len(category_names))
+    return model, category_names
 
-def load_checkpoint( checkpath, model, optimizer=None, loss=None):
-    checkpoint = torch.load(checkpath, weights_only=True)
-    epoch = checkpoint['epoch']
-    class_cnt = checkpoint['categories']
-    model = config_fast_model( model, class_cnt)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    if optimizer is not None:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    if loss is not None:
-        loss = checkpoint['loss']
-    print( "Epoch {epoch} file loaded")
-    return model, epoch, class_cnt, optimizer
+def train_main( dset, checkpoint_file, mask_model, num_epochs):
+    category_names, cats_ids, num_classes, train_loader, val_loader = load_dloader(dset)
+    model, category_names = load_model( mask_model, category_names, load_weights=False)
+    print( f"train_main {category_names = }")
+    model.train()
 
+    # construct an optimizer
+    params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.SGD(
+        params,
+        lr=0.005,
+        momentum=0.9,
+        weight_decay=0.0005
+    )
 
-image_size = 256 # 513
-checkpoint_file = "datasets/fast/model_checkpoint.pth"
+    next_epoch = 0
+    if os.path.isfile( checkpoint_file):
+        model, last_epoch, class_cnt, optimizer = load_checkpoint( checkpoint_file, model, optimizer)
+        next_epoch = last_epoch + 1
+        print( f"{next_epoch = } {class_cnt = }")
+        if class_cnt != num_classes:
+            print( f"Change model to {num_classes = }")
+            model = config_fast_model( model, num_classes)
 
-debug_set=False
-dset='lav_coco' # 'coco_torch' 'own_coco' 'lav_coco'
-model_torch=False
-# Set the number of epochs for training
-num_epochs = 300
+    # Loop through each epoch
+    for epoch in range(next_epoch, next_epoch+num_epochs):
+        print(f"\nEpoch {epoch + 1}/{next_epoch+num_epochs}")
 
-if True:
-    ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( 'val', '2014')
+        # Train the model for one epoch, printing status every 25 iterations
+        #my_train_one_epoch(model, optimizer, train_loader, epoch, print_freq=5)  # Using train_loader for training
+        train_one_epoch(model, optimizer, train_loader, torch.device("cpu"), epoch, print_freq=5)  # Using train_loader for training
 
-    if train: # train
-        model.train()
+        # Evaluate the model on the validation dataset
+        evaluate(model, val_loader, device=torch.device("cpu"))  # Using val_loader for evaluation
 
-        # construct an optimizer
-        params = [p for p in model.parameters() if p.requires_grad]
-        optimizer = torch.optim.SGD(
-            params,
-            lr=0.005,
-            momentum=0.9,
-            weight_decay=0.0005
-        )
-
-        next_epoch = 0
+        # Optionally, save the model checkpoint after each epoch
+        #torch.save(model.state_dict(), f"datasets/fast/model_epoch_{epoch + 1}.pth")
         if os.path.isfile( checkpoint_file):
-            model, last_epoch, class_cnt, optimizer = load_checkpoint( checkpoint_file, model, optimizer)
-            next_epoch = last_epoch + 1
-            print( f"{next_epoch = } {class_cnt = }")
-            if class_cnt != num_classes:
-                print( f"Change model to {num_classes = }")
-                model = config_fast_model( model, num_classes)
+            os.rename( checkpoint_file, os.path.join( os.path.dirname(checkpoint_file), f"model_checkpoint_epoch_{epoch:03d}.pth"))
+            print( f"renamed model_checkpoint_epoch_{epoch = }")
+        torch.save({
+                    'epoch': epoch,
+                    'categories': num_classes,
+                    'classes': category_names,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    }, checkpoint_file)
+        print( f"saved {epoch+1 = }")
 
-        # Loop through each epoch
-        for epoch in range(next_epoch, next_epoch+num_epochs):
-            print(f"\nEpoch {epoch + 1}/{next_epoch+num_epochs}")
+import random
 
-            # Train the model for one epoch, printing status every 25 iterations
-            #my_train_one_epoch(model, optimizer, train_loader, epoch, print_freq=5)  # Using train_loader for training
-            train_one_epoch(model, optimizer, train_loader, torch.device("cpu"), epoch, print_freq=5)  # Using train_loader for training
-
-            # Evaluate the model on the validation dataset
-            evaluate(model, val_loader, device=torch.device("cpu"))  # Using val_loader for evaluation
-
-            # Optionally, save the model checkpoint after each epoch
-            #torch.save(model.state_dict(), f"datasets/fast/model_epoch_{epoch + 1}.pth")
-            if os.path.isfile( checkpoint_file):
-                os.rename( checkpoint_file, os.path.join( os.path.dirname(checkpoint_file), f"model_checkpoint_epoch_{epoch:03d}.pth"))
-                print( f"renamed model_checkpoint_epoch_{epoch = }")
-            torch.save({
-                        'epoch': epoch,
-                        'categories': num_classes,
-                        'model_state_dict': model.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                        }, checkpoint_file)
-            print( f"saved {epoch+1 = }")
-
-    else: # inference
-        next_epoch = 0
-        if os.path.isfile( checkpoint_file):
-            model, last_epoch, class_cnt, optimizer = load_checkpoint( checkpoint_file, model)
-            print( f"{last_epoch = }")
-
-        model.eval()
-        for imgs, targets in val_loader:
+def test_main( checkpoint_file, mask_model):
+    model, last_epoch, category_names = load_checkpoint_test( mask_model, checkpoint_file)
+    print( f"{last_epoch = }")
+    model.eval()
+    test_files = get_test_files( 'LAV')
+    image_path = random.choice( test_files)
+    print( f"{image_path = }")
+    image = torchvision.io.read_image(image_path) # .float()
+    transform = T.ToDtype(torch.float32, scale=True)
+    image = transform( image)
+    print( f"{image.shape = }")
+    pred_batch_dict = model([image])
+    #print( f"{type(pred_batch_dict[0]) = }")
+    print( f"{pred_batch_dict[0].keys() = }")
+    plot_prediction( image, pred_batch_dict[0], category_names, epoch=last_epoch, file_name=os.path.basename(image_path))
+    return
+    for imgs, targets in val_loader:
             pred_batch_dict = model(imgs, targets)
             print( type(pred_batch_dict[0]))
             for img, pred in zip( imgs, pred_batch_dict):
-            	plot_prediction( img, pred, category_names, epoch=last_epoch, file_name='x')
+                plot_prediction( img, pred, category_names, epoch=last_epoch, file_name='x')
             for name, pred_val in pred_batch_dict[0].items():
                 #print(f"{name:<20}{pred_val:.3f}")
                 print(f"{name:<20}{len(pred_val)}")
             break
 
-    #assert False
-assert False
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", "-V", action="store_true", help="show version")
+    parser.add_argument("--debug", "-D", action="store_true", help="enable debug output")
+    parser.add_argument(
+        "--test", "-T",
+        action="store_true",
+        help="select an arbitrary image and run inference on it",
+    )
+    args = parser.parse_args()
 
-import random
+    debug_set=args.debug
+    dset='lav_coco' # 'coco_torch' 'own_coco' 'lav_coco'
+    model_torch=False
+    image_size = 256 # 513
+    checkpoint_file = "datasets/fast/model_checkpoint.pth"
+
+    if args.version:
+        print(f"{__appname__} {__version__}")
+        return 0
+
+    if args.test:
+        test_main( checkpoint_file, model_torch)
+        return 0
+
+    # Set the number of epochs for training
+    num_epochs = 300
+    train_main( dset, checkpoint_file, model_torch, num_epochs)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
+
+assert False
 
 
 def coco_collate_fn(batch):
