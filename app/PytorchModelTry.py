@@ -72,8 +72,88 @@ def plot_sample( sample):
     plt.axis('off')
     plt.show()
 
-def gen_labelme_json( image, pred, cat_names, epoch, file_name, min_score=0.9):
-    json_file = os.path.join( "Test-Images", f"{file_name.replace('.jpg','.json')}")
+import datetime
+
+class Flag:
+    restarted = True
+
+    def started(self):
+        state = Flag.restarted
+        Flag.restarted = False
+        return state
+
+def save_coco_json( epoch, topic, data):
+    #print(type(data))
+    #data.summarize()
+    f = Flag()
+    json_file = os.path.join( os.path.join( "Test-Images", "training_progress"), f"history_val.json")
+    json_file_tmp = os.path.join( os.path.join( "Test-Images", "training_progress"), f"history_val_tmp.json")
+    stats = data.stats.tolist()
+    hist_map = { 
+                '0.50_0.95_all': stats[0],
+                '0.50_all': stats[1],
+                '0.75_all': stats[2],
+                '0.50_0.95_small': stats[3],
+                '0.50_0.95_medium': stats[4],
+                '0.50_0.95_large': stats[5],
+    }
+    hist_mar = { 
+                '0.50_0.95_all_1': stats[6],
+                '0.50_0.95_all_10': stats[7],
+                '0.50_0.95_all_100': stats[8],
+                '0.50_0.95_small_100': stats[9],
+                '0.50_0.95_medium_100': stats[10],
+                '0.50_0.95_large_100': stats[11],
+    }
+    hist_rec = {
+             "time": str(datetime.datetime.now()).split('.')[0],
+             "topic": topic,
+             "epoch": epoch,
+             "restarted": f.started(),
+             'data': stats,
+             'mAP': hist_map,
+             'mAR': hist_mar,
+    }
+    try:
+        with open(json_file, "r") as old_f:
+            history = json.load(old_f)
+    except FileNotFoundError:
+        history = []
+        print( 'New history')
+    print( len( history))
+    history.append( hist_rec)
+    for hist in history:
+        if 'data' in hist and 'mAP' not in hist:
+            stats = hist['data']
+            #print( stats)
+            hist_map = { 
+                '0.50_0.95_all': stats[0],
+                '0.50_all': stats[1],
+                '0.75_all': stats[2],
+                '0.50_0.95_small': stats[3],
+                '0.50_0.95_medium': stats[4],
+                '0.50_0.95_large': stats[5],
+            }
+            hist['mAP'] = hist_map
+        if 'data' in hist and 'mAR' not in hist:
+            stats = hist['data']
+            hist_mar = { 
+                '0.50_0.95_all_1': stats[6],
+                '0.50_0.95_all_10': stats[7],
+                '0.50_0.95_all_100': stats[8],
+                '0.50_0.95_small_100': stats[9],
+                '0.50_0.95_medium_100': stats[10],
+                '0.50_0.95_large_100': stats[11],
+            }
+            hist['mAR'] = hist_mar
+            
+    with open(json_file_tmp, 'w', encoding='utf-8') as new_f:
+        json.dump( history, new_f, ensure_ascii=False, indent=4)
+        #json.dump( history, new_f, ensure_ascii=False)
+    os.rename( json_file_tmp, json_file)
+
+def gen_labelme_json( image, pred, cat_names, epoch, file_name, min_score=0.8):
+    json_file = os.path.join( "Test-Images", os.path.join( "inference", f"{file_name.replace('.jpg','.json')}"))
     #print( f"{json_file = }")
     labelme_dict = {}
     labelme_dict['version'] = "1.0.0"
@@ -227,13 +307,100 @@ def config_fast_model( model, class_cnt):
     in_features_box = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_channels=in_features_box, num_classes=class_cnt)
     new_in_features_box = model.roi_heads.box_predictor.cls_score.in_features
-    print( f"{in_features_box = } -> {new_in_features_box = } / {class_cnt = }")
+    print( f"    CONFIG_FAST_MODEL:   {in_features_box = } -> {new_in_features_box = } / {class_cnt = }")
     return model
 
+import seaborn as sns
+import pandas as pd
+
+def get_count_per_class(coco):
+    counts = {}
+    for cat_id in coco.getCatIds():
+        counts[coco.loadCats(cat_id)[0]['name']] = len(coco.getAnnIds(catIds=cat_id))
+    return counts
+
+def display_count_per_class(counts):
+    plt.figure(figsize=(15,4))
+    plt.xticks(rotation=80)
+    sns.barplot(data = pd.DataFrame.from_dict([counts]).melt(), x = "variable", y="value", hue="variable").set_title('Natural Images Class Distribution')
+    plt.show()
+
+def synthesize_image( img_info, max_cnt_class, counts):
+    #print( f'{img_info = }')
+    orig_img = img_info[0]['file_name']
+    orig_json = img_info[0]['file_name'].replace( '.jpg', '.json')
+    orig_width = img_info[0]['width']
+    orig_height = img_info[0]['height']
+    #print( f'{orig_width = } {orig_height = }')
+    synth_dir = os.path.join( 'LAV', 'LAV_synth')
+    synth_img = os.path.join( synth_dir, os.path.basename( orig_img))
+    synth_json = os.path.join( synth_dir, os.path.basename( orig_json))
+    #print( f'{orig_json = } {orig_img = } {synth_json = } {synth_img = }')
+    if not os.path.isfile( synth_img) and not os.path.isfile( synth_json):
+        with open(orig_json, "r") as old_f:
+            labelme_json = json.load(old_f)
+        #print( f'{len(labelme_json['shapes']) = }')
+        synth_pil = Image.open(orig_img)
+        new_shapes = []
+        for shape in labelme_json['shapes']:
+            if counts[shape['label']] < max_cnt_class:
+                counts[shape['label']] += 1 
+                #print( f'incremented {shape['label'] = } {counts[shape['label']] = }')
+                new_shapes.append( shape)
+            else:
+                #print( f'removing {shape = }')
+                x = int( min( shape['points'][0][0], shape['points'][1][0]))
+                y = int( min( shape['points'][0][1], shape['points'][1][1]))
+                shape_width = int( max( shape['points'][0][0], shape['points'][1][0]) - x)
+                shape_height = int( max( shape['points'][0][1], shape['points'][1][1]) - y)
+                #print( f'{x = }')
+                #print( f'{y = }')
+                #print( f'{shape_width = }')
+                #print( f'{shape_height = }')
+                while True:
+                    source_x = random.randrange( 0, orig_width - shape_width)
+                    source_y = random.randrange( 0, orig_height - shape_height)
+                    paste_pil = synth_pil.copy().crop( [ source_x, source_y, source_x+shape_width, source_y+shape_height])
+                    #print( f'{paste_pil.convert('L').getextrema() = }')
+                    if paste_pil.convert('L').getextrema()[0] > 195:
+                        synth_pil.paste( paste_pil, [ x, y])
+                        break
+        labelme_json['shapes'] = new_shapes
+        with open(synth_json, 'w', encoding='utf-8') as new_f:
+            json.dump( labelme_json, new_f, ensure_ascii=False, indent=4)
+        synth_pil.save(synth_img)
+        #print( f'{counts = }')
+    return counts
+
+def generate_balancing( path):
+    coco = COCO( f'LAV/dataset.json')
+    counts = get_count_per_class(coco)
+    display_count_per_class(counts)
+    #sorted_classes = [k for k, v in sorted( counts.items(), key=lambda item: item[1], reverse=True)]
+    sorted_classes = [k for k, v in sorted( counts.items(), key=lambda item: item[1])]
+    #print( f'{sorted_classes = }')
+    for class_name in sorted_classes:
+        #print( f'{class_name}: {counts[class_name]}')
+        cat_ids = coco.getCatIds(catNms=[class_name])
+        #print( f'{cat_ids = }')
+        img_ids = coco.getImgIds(catIds=cat_ids)
+        #print( f'{img_ids = }')
+        for img_id in img_ids:
+            #ann_ids = coco.getAnnIds(imgIds=img_id)
+            #print( f'{ann_ids = }')
+            img_info = coco.loadImgs(img_id)
+            max_cnt_class = counts[sorted_classes[-1]]
+            #print( f'{max_cnt_class = }')
+            counts = synthesize_image( img_info, max_cnt_class, counts)
+        #print( f'{counts = }')
+    display_count_per_class(counts)
+
+
 def load_lav_coco(split):
-    assert split == 'train' or split == 'val'
+    assert split == 'train' or split == 'val' or split == 'dataset'
     ann_file=f'LAV/{split}.json'
     coco = COCO(ann_file)
+    print( f"{split}: {get_count_per_class(coco)}")
     cats_ids = coco.getCatIds()
     print( 'Categories count', len(cats_ids), 'max', max(cats_ids))
     #print(f"{coco.loadCats(cats_ids) = }")
@@ -290,6 +457,11 @@ def load_categories(dset):
             category_names = category_names_train 
             cats_ids = cats_ids_train
             num_classes = 1 + max(cats_ids)
+
+        case 'lav_coco_single':
+            coco_set_train, cats_ids, category_names = load_lav_coco('dataset')
+            coco_set_val, _ = torch.utils.data.random_split( coco_set_train, [0.3, 0.7])
+            num_classes = 1 + max(cats_ids)
     return category_names, cats_ids, num_classes, coco_set_train, coco_set_val
 
 def load_dloader(dset):
@@ -307,7 +479,8 @@ def load_dloader(dset):
 
     train_loader = torch.utils.data.DataLoader(
         coco_set_train,
-        batch_size=4,
+        batch_size=2,
+        shuffle=True,
         # We need a custom collation function here, since the object detection
         # models expect a sequence of images and target dictionaries. The default
         # collation function tries to torch.stack() the individual elements,
@@ -317,7 +490,7 @@ def load_dloader(dset):
     )
     val_loader = torch.utils.data.DataLoader(
         coco_set_val,
-        batch_size=2,
+        batch_size=3,
         # We need a custom collation function here, since the object detection
         # models expect a sequence of images and target dictionaries. The default
         # collation function tries to torch.stack() the individual elements,
@@ -345,7 +518,7 @@ def load_model( mask_model, checkpath):
     #model = config_fast_model( model, 1+len(category_names))
 
     last_epoch = 0
-    category_names = None
+    loaded_category_names = None
     optimizer_state = None
     if mask_model:
         model = torchvision.models.get_model("maskrcnn_resnet50_fpn_v2", weights=None, weights_backbone=None)
@@ -353,21 +526,25 @@ def load_model( mask_model, checkpath):
         if checkpath is None:
             weights = FasterRCNN_ResNet50_FPN_Weights.COCO_V1
             print( f"F{weights.meta.keys() = }")
-            category_names = weights.meta["categories"]
+            loaded_category_names = weights.meta["categories"]
+            loaded_class_cnt = 1+len(loaded_category_names)
             model = fasterrcnn_resnet50_fpn( weights=weights)
+            print( f"FastRCNN Model loaded default categories {loaded_class_cnt = }")
         else:
             checkpoint_dict = torch.load( checkpath, weights_only=True)
             last_epoch = checkpoint_dict['epoch']
-            category_names = checkpoint_dict['classes']
-            model = fasterrcnn_resnet50_fpn( num_classes=1+len(category_names))
-            model.load_state_dict( checkpoint_dict['model_state_dict'])
+            loaded_category_names = checkpoint_dict['classes']
+            loaded_class_cnt = 1+len(loaded_category_names)
+            model = fasterrcnn_resnet50_fpn( num_classes=loaded_class_cnt)
+            #model = config_fast_model( model, loaded_class_cnt)
+            model.load_state_dict( checkpoint_dict['model_state_dict'], strict = True)
             optimizer_state = checkpoint_dict['optimizer_state_dict']
-        print( f"FastRCNN Model loaded categories {len(category_names) = }")
-    return model, last_epoch, category_names, optimizer_state
+            print( f"FastRCNN Model loaded checkpoint categories {loaded_class_cnt = }")
+    return model, last_epoch, loaded_class_cnt, loaded_category_names, optimizer_state
 
 def merge_cats( dset_category_names, model_category_names):
-    print( f" {dset_category_names = }")
-    print( f"{model_category_names = }")
+    #print( f" {dset_category_names = }")
+    #print( f"{model_category_names = }")
     merged_categories = []
     new_cats = []
     for cat in dset_category_names:
@@ -390,12 +567,70 @@ def merge_cats( dset_category_names, model_category_names):
         merged_categories.append( cat)
     return merged_categories
 
+def check_optimizer( new_state_dict, loaded_state_dict, new_classes):
+    #print( "check_optimizer START")
+    if new_state_dict.keys() != loaded_state_dict.keys():
+        print( f"{new_state_dict.keys() = } != {loaded_state_dict.keys() = }")
+        return False
+    if new_state_dict['param_groups'][0].keys() != loaded_state_dict['param_groups'][0].keys():
+        #print( f"{new_state_dict['param_groups'][0].keys() = } != {loaded_state_dict['param_groups'][0].keys() = }")
+        for key in new_state_dict['param_groups'][0].keys():
+            if key not in loaded_state_dict['param_groups'][0].keys():
+                print( f"MISSING {key = } {new_state_dict['param_groups'][0][key] = }")
+        for key in loaded_state_dict['param_groups'][0].keys():
+            if key not in new_state_dict['param_groups'][0].keys():
+                print( f"MISSING {key = } {loaded_state_dict['param_groups'][0][key] = }")
+            else:
+                if loaded_state_dict['param_groups'][0][key] != new_state_dict['param_groups'][0][key]:
+                    print( f"CHANGED {loaded_state_dict['param_groups'][0][key] = } != {new_state_dict['param_groups'][0][key] = }")
+    #if new_state_dict['param_groups'] != loaded_state_dict['param_groups']:
+        #print( f"{new_state_dict['param_groups'] = } != {loaded_state_dict['param_groups'] = }")
+        #return False
+    if len(new_state_dict['state'].keys()) > 0:
+        if new_state_dict['state'].keys() != loaded_state_dict['state'].keys():
+            print( f"{new_state_dict['state'].keys() = } != {loaded_state_dict['state'].keys() = }")
+            return False
+        for key in new_state_dict['state'].keys():
+            new_opt = new_state_dict['state'][key]
+            loaded_opt = loaded_state_dict['state'][key]
+            if False:
+                print( f"{key = } {new_opt = }")
+                print( f"{key = } {loaded_opt = }")
+            for new_mom in new_opt.keys():
+                if new_opt[new_mom].shape != loaded_opt[loaded_mom].shape:
+                    print( f"{key = } {new_mom = } {new_opt[new_mom].shape = } {loaded_mom = } {loaded_opt[loaded_mom].shape = }")
+                    return False
+    #else:
+        #print( f"empty {new_state_dict['state'].keys() = }")
+    if 68 in loaded_state_dict['state'].keys():
+        #print(f"optimizer load {loaded_state_dict['state'][68]['momentum_buffer'].shape = }")
+        if loaded_state_dict['state'][68]['momentum_buffer'].shape[0] != new_classes:
+            print(f"CHANGED {loaded_state_dict['state'][68]['momentum_buffer'].shape = }")
+            return False
+    if 69 in loaded_state_dict['state'].keys():
+        #print(f"optimizer load {loaded_state_dict['state'][69]['momentum_buffer'].shape = }")
+        if loaded_state_dict['state'][69]['momentum_buffer'].shape[0] != new_classes:
+            print(f"CHANGED {loaded_state_dict['state'][69]['momentum_buffer'].shape = }")
+            return False
+    #print( "check_optimizer DONE")
+    return True
+
+def print_optimizer( optimizer, tag='1', showValues=False):
+        print( f"{tag} {optimizer.state_dict().keys() = }")
+        print( f"{tag} {optimizer.state_dict()['state'] = }")
+        print( f"{tag} {optimizer.state_dict()['param_groups'] = }")
+        for par, opt in optimizer.state_dict()['state'].items():
+            if showValues:
+                print( f"{tag} {par = } {opt = }")
+            for mom in opt.keys():
+                print( f"{tag} {par = } {mom = } {opt[mom].shape = }")
+
 def train_main( dset, checkpoint_file, mask_model, num_epochs):
-    model, last_epoch, loaded_category_names, optimizer_state = load_model( mask_model, checkpoint_file)
+    #checkpoint_file = "datasets/fast/model_checkpoint_epoch_1585-12classes.pth"
+    model, last_epoch, loaded_class_cnt, loaded_category_names, optimizer_state = load_model( mask_model, checkpoint_file)
     category_names, _, num_classes, train_loader, val_loader = load_dloader(dset)
     category_names = merge_cats( category_names, loaded_category_names)
     #print( f"train_main {category_names = }")
-    model.train()
 
     # construct an optimizer
     params = [p for p in model.parameters() if p.requires_grad]
@@ -405,39 +640,37 @@ def train_main( dset, checkpoint_file, mask_model, num_epochs):
         momentum=0.9,
         weight_decay=0.0005
     )
-    if  optimizer_state is not None:
+    if optimizer_state is not None:
+        if not check_optimizer( optimizer.state_dict(), optimizer_state, num_classes):
+            return
         optimizer.load_state_dict(optimizer_state)
 
     next_epoch = last_epoch + 1
-    loaded_class_cnt = 1+len(loaded_category_names)
     print( f"{next_epoch = } {loaded_class_cnt = }")
     if loaded_class_cnt != num_classes:
         print( f"Change model to {num_classes = }")
         model = config_fast_model( model, num_classes)
-    model = config_fast_model( model, num_classes)
 
+    model.train()
     # Loop through each epoch
     for epoch in range(next_epoch, next_epoch+num_epochs):
         print(f"\nEpoch {epoch + 1}/{next_epoch+num_epochs}")
 
         # Train the model for one epoch, printing status every 25 iterations
-        #my_train_one_epoch(model, optimizer, train_loader, epoch, print_freq=5)  # Using train_loader for training
-        train_one_epoch(model, optimizer, train_loader, torch.device("cpu"), epoch, print_freq=5)  # Using train_loader for training
+        train_one_epoch(model, optimizer, train_loader, torch.device("cpu"), epoch, print_freq=10)  # Using train_loader for training
 
         # Evaluate the model on the validation dataset
         coco_evaluator = evaluate(model, val_loader, device=torch.device("cpu"))  # Using val_loader for evaluation
-        #print(coco_evaluator.summarize())
-        for iou_type, coco_eval in coco_evaluator.coco_eval.items():
-            print(f"IoU metric: {iou_type}")
-            print(coco_eval.stats)
-        print( type( coco_evaluator.coco_eval['bbox']))
-
+        coco_evaluator.coco_eval['bbox'].summarize()
+        save_coco_json( epoch, 'cont-1', coco_evaluator.coco_eval['bbox'])
 
         # Optionally, save the model checkpoint after each epoch
         #torch.save(model.state_dict(), f"datasets/fast/model_epoch_{epoch + 1}.pth")
         if os.path.isfile( checkpoint_file):
             os.rename( checkpoint_file, os.path.join( os.path.dirname(checkpoint_file), f"model_checkpoint_epoch_{epoch:03d}.pth"))
             print( f"renamed model_checkpoint_epoch_{epoch = }")
+        #print_optimizer( optimizer, tag='save')
+        if '68' in optimizer.state_dict()['state'].keys(): print(f"before save {optimizer.state_dict()['state'][68]['momentum_buffer'].shape = }")
         torch.save({
                     'epoch': epoch,
                     'classes': category_names,
@@ -447,46 +680,44 @@ def train_main( dset, checkpoint_file, mask_model, num_epochs):
         print( f"saved {epoch+1 = }")
 
 import random
+from tqdm.auto import tqdm
 
 def test_main( checkpoint_file, mask_model):
-    model, last_epoch, category_names, _ = load_model( mask_model, checkpoint_file)
+    model, last_epoch, loaded_class_cnt, category_names, _ = load_model( mask_model, checkpoint_file)
     print( f"{last_epoch = }")
     model.eval()
-    test_files = get_test_files( 'LAV/LAV_NRW--Abt_Rheinland--PA_3103--29569')
-    image_path = random.choice( test_files)
-    print( f"{image_path = }")
-    image = torchvision.io.read_image(image_path) # .float()
-    transform = T.ToDtype(torch.float32, scale=True)
-    image = transform( image)
-    print( f"{image.shape = }")
-    pred_batch_dict = model([image])
-    #print( f"{type(pred_batch_dict[0]) = }")
-    print( f"{pred_batch_dict[0].keys() = }")
-    #plot_prediction( image, pred_batch_dict[0], category_names, epoch=last_epoch, file_name=os.path.basename(image_path))
-    gen_labelme_json( image, pred_batch_dict[0], category_names, epoch=last_epoch, file_name=os.path.basename(image_path), min_score=0.8)
+    #test_files = get_test_files( 'LAV/LAV_NRW--Abt_Rheinland--PA_3103--29569')
+    test_files = get_test_files( 'LAV')
+    for image_path in tqdm( test_files):
+        #if not os.path.isfile( tf.replace( '.jpg', '.json')):
+            #image_path = random.choice( test_files)
+            #print( f"{image_path = }")
+            image = torchvision.io.read_image(image_path) # .float()
+            transform = T.ToDtype(torch.float32, scale=True)
+            image = transform( image)
+            #print( f"{image.shape = }")
+            pred_batch_dict = model([image])
+            #print( f"{type(pred_batch_dict[0]) = }")
+            #print( f"{pred_batch_dict[0].keys() = }")
+            #plot_prediction( image, pred_batch_dict[0], category_names, epoch=last_epoch, file_name=os.path.basename(image_path))
+            gen_labelme_json( image, pred_batch_dict[0], category_names, epoch=last_epoch, file_name=os.path.basename(image_path), min_score=0.8)
     return
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", "-V", action="store_true", help="show version")
     parser.add_argument("--debug", "-D", action="store_true", help="enable debug output")
-    parser.add_argument(
-        "--test", "-T",
-        action="store_true",
-        help="select an arbitrary image and run inference on it",
-    )
-    parser.add_argument(
-        "--restart", "-R",
-        action="store_true",
-        help="Restart training from scratch",
-    )
+    parser.add_argument( "--test", "-T", action="store_true", help="select an arbitrary image and run inference on it",)
+    parser.add_argument( "--restart", "-R", action="store_true", help="Restart training from scratch",)
+    parser.add_argument( "--generate", "-G", action="store_true", help="Generate target for class balancing",)
     args = parser.parse_args()
 
     debug_set=args.debug
-    dset='lav_coco' # 'coco_torch' 'own_coco' 'lav_coco'
+    dset='lav_coco_single' # 'coco_torch' 'own_coco' 'lav_coco_single' 'lav_coco'
     model_torch=False
     image_size = 256 # 513
     checkpoint_file = None
+
     if not args.restart:
         checkpoint_file = "datasets/fast/model_checkpoint.pth"
 
@@ -503,16 +734,14 @@ def main() -> int:
         test_main( checkpoint_file, model_torch)
         return 0
 
+    if args.generate:
+        generate_balancing( 'LAV/LAV_synth')
+        return 0
+
     # Set the number of epochs for training
     num_epochs = 300
     train_main( dset, checkpoint_file, model_torch, num_epochs)
     return 0
-
-
-if __name__ == '__main__':
-    sys.exit(main())
-
-assert False
 
 
 def coco_collate_fn(batch):
@@ -546,19 +775,6 @@ def coco_collate_fn(batch):
 
     return images, targets
 
-collate_fn=lambda x: tuple(zip(*x))
-
-from torch.utils.data import DataLoader
-
-ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( split='val', year='2017')
-coco_set = libDsetCoco.COCOSegmentation( ann_file, ids_file, imagedir, split='val', image_size=image_size)
-
-print( 'Dataset size', len(coco_set))
-#print( coco_set.NUM_CLASSES, len(coco_set.CAT_LIST))
-#print( coco_set[0])
-#print( coco_set[0]['image'])
-#coco_set.display_image_target( random.randrange(len(coco_set)))
-
 def print_batch(dataset_iter):
         images, targets = next( iter( dataset_iter))
         print('iter batch_len len(images)',len(images),'len(targets)',len(targets))
@@ -573,20 +789,6 @@ def print_batch(dataset_iter):
         #print()
         #print(targets[1][0].keys())
         print()
-
-batch_size=5 # 4
-
-# Create the DataLoader with your collate_fn
-dataset_iter = DataLoader(
-    coco_set,
-    batch_size=batch_size,
-    shuffle=False,
-    collate_fn=coco_collate_fn
-)
-
-print_batch(dataset_iter)
-
-######## COCO 1 ================
 
 def run_inference_batch( batch_idx, model, images):
     #print('shape', images[0].shape), targets[0].shape)
@@ -679,11 +881,6 @@ def run_inference_epoch(model, dataloader, batches_cnt):
         #coco_set.display_image_target( i)
         results = run_inference_batch( i, model, images)
         print_batch_results( i, batches_cnt, images, results)
-
-import math
-from tqdm.auto import tqdm
-
-debug_loss=False
 
 def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_training):
     """
@@ -780,6 +977,44 @@ def run_epoch(model, dataloader, optimizer, lr_scheduler, scaler, epoch_id, is_t
     
     # Return the average loss for this epoch
     return epoch_loss / (batch_id + 1)
+
+import math
+
+if __name__ == '__main__':
+    sys.exit(main())
+
+assert False
+
+
+collate_fn=lambda x: tuple(zip(*x))
+
+from torch.utils.data import DataLoader
+
+ann_file, ids_file, imagedir = libDloadCoco.download_coco_files( split='val', year='2017')
+coco_set = libDsetCoco.COCOSegmentation( ann_file, ids_file, imagedir, split='val', image_size=image_size)
+
+print( 'Dataset size', len(coco_set))
+#print( coco_set.NUM_CLASSES, len(coco_set.CAT_LIST))
+#print( coco_set[0])
+#print( coco_set[0]['image'])
+#coco_set.display_image_target( random.randrange(len(coco_set)))
+
+batch_size=5 # 4
+
+# Create the DataLoader with your collate_fn
+dataset_iter = DataLoader(
+    coco_set,
+    batch_size=batch_size,
+    shuffle=False,
+    collate_fn=coco_collate_fn
+)
+
+print_batch(dataset_iter)
+
+######## COCO 1 ================
+
+
+debug_loss=False
 
 if False:
     print( 'detection', torchvision.models.list_models(module=torchvision.models.detection))

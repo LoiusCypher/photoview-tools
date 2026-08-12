@@ -31,7 +31,19 @@ services:
       - "/home/helmut/pod-dev/photoview-tools/data/handwriting/orig:/handwriting/orig:ro"
       - "/home/helmut/pod-dev/photoview-tools/data/handwriting/generated:/handwriting/generated:rw"
       - "/home/helmut/pod-dev/photoview-tools/logs:/Mask-RCNN_model/logs:rw"
-      - "/home/helmut/pod-dev/photoview-tools/Mask-RCNN_TF2.14.0:/Mask-RCNN_model:rw"
+#      - "/home/helmut/pod-dev/photoview-tools/Mask-RCNN_TF2.14.0:/Mask-RCNN_model:rw"
 #      - "./handwriting/generated:/handwriting/generated:rw"
       - "/home/helmut/Downloads/LAV:/app/LAV:rw"
 
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SERVER_ROOT_URL=http://192.168.1.151/
+#      - GF_PLUGINS_PREINSTALL=grafana-clock-panel
+    ports:
+      - '3000:3000'
+    volumes:
+      - '/home/helmut/pod-dev/photoview-tools/_container_graphana:/var/lib/grafana:rw,z'
+      - "/home/helmut/pod-dev/photoview-tools/app:/var/lib/grafana/app:rw,z"

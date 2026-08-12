@@ -1,7 +1,11 @@
 #!/bin/bash
 labelme && (
-mv LAV/train.json LAV/train.old
-mv LAV/val.json LAV/val.old
-labelme2coco LAV LAV --train_split_rate 0.90 --category_id_start 1
+mv -f LabelmeCoco/train.json LabelmeCoco/train.old
+mv -f LabelmeCoco/val.json LabelmeCoco/val.old
+mv -f LabelmeCoco/dataset.json LabelmeCoco/dataset.old
+labelme2coco LAV LabelmeCoco --category_id_start 1                         # smaller datasets will not be splitted
+mv -f LabelmeCoco/dataset.json LabelmeCoco/dataset.curr
+labelme2coco LAV LabelmeCoco --category_id_start 1 --train_split_rate 0.80 # split bigger datasets
+mv -f LabelmeCoco/dataset.curr LabelmeCoco/dataset.json
 )
 
