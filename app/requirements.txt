@@ -102,8 +102,8 @@ pycocotools>=2.0.11       # newest works orig
 #tensorflow==2.15.1        #        works # orig             tensorflow==2.14.0
 tensorflow>=2.20.0        #        works # orig             tensorflow==2.14.0
 #torch>=2.13.0+cpu
-#torchvision>=0.28.0+cpu
 torch==2.12.1
+#torchvision>=0.28.0+cpu
 #torchvision>=0.27.1+xpu
 torchvision>=0.27.1
 mariadb>=1.1.14           #        works #
@@ -113,6 +113,9 @@ tqdm>=4.68.4
 pandas>=3.0.3
 distinctipy>=1.3.4
 PyQt6>=6.11.0
+
+paramiko>=5.0.0
+seaborn>=0.13.2
 
 # absl-py==2.4.0
 # asttokens==3.0.1

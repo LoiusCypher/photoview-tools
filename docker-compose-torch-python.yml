@@ -18,7 +18,7 @@ services:
       #XDG_RUNTIME_DIR: "/tmp/Wayland-runtime-root"
       #WAYLAND_DISPLAY: "wayland-0"
     volumes:
-      - "/home/helmut/pod-dev/photoview-tools/app:/app:z"
+      - "/home/helmut/docker/photoview-tools/app:/app:z"
       #- "/run/user/1000:$XDG_RUNTIME_DIR:z"
       #- "/run/user/1000/$WAYLAND_DISPLAY:/tmp/Wayland-runtime-root/$WAYLAND_DISPLAY:rw"
       - "/run/user/1000/wayland-0:/tmp/runtime-root/wayland-0:rw,z"
@@ -28,12 +28,13 @@ services:
       - "${HOST_PHOTOVIEW_LOCATION}/storage:/home/photoview/media-cache"
       - "${HOST_PHOTOVIEW_MEDIA_ROOT}:/photos:ro"
       - "${HOST_PHOTOVIEW_LOCATION}/storage:/home/photoview/media-cache"
-      - "/home/helmut/pod-dev/photoview-tools/data/handwriting/orig:/handwriting/orig:ro"
-      - "/home/helmut/pod-dev/photoview-tools/data/handwriting/generated:/handwriting/generated:rw"
-      - "/home/helmut/pod-dev/photoview-tools/logs:/Mask-RCNN_model/logs:rw"
-#      - "/home/helmut/pod-dev/photoview-tools/Mask-RCNN_TF2.14.0:/Mask-RCNN_model:rw"
+      - "/home/helmut/docker/photoview-tools/data/handwriting/orig:/handwriting/orig:ro"
+      - "/home/helmut/docker/photoview-tools/data/handwriting/generated:/handwriting/generated:rw"
+      - "/home/helmut/docker/photoview-tools/logs:/Mask-RCNN_model/logs:rw"
+#      - "/home/helmut/docker/photoview-tools/Mask-RCNN_TF2.14.0:/Mask-RCNN_model:rw"
 #      - "./handwriting/generated:/handwriting/generated:rw"
       - "/home/helmut/Downloads/LAV:/app/LAV:rw"
+      - "/:/host_fs:ro,z"
 
   grafana:
     image: grafana/grafana
@@ -45,5 +46,5 @@ services:
     ports:
       - '3000:3000'
     volumes:
-      - '/home/helmut/pod-dev/photoview-tools/_container_graphana:/var/lib/grafana:rw,z'
-      - "/home/helmut/pod-dev/photoview-tools/app:/var/lib/grafana/app:rw,z"
+      - '/home/helmut/docker/photoview-tools/_container_graphana:/var/lib/grafana:rw,z'
+      - "/home/helmut/docker/photoview-tools/app:/var/lib/grafana/app:rw,z"
