@@ -18,7 +18,7 @@ def check_for_removed_items( db, host_id, subtree_to_check=None):
     assert conn is not None
     if subtree_to_check is None:
         subtree_to_check = db.root_in_container
-    for folder_id, folder_host_path in db.folders( conn, host_id):
+    for folder_id, folder_host_path in db.all_folders( conn, host_id):
         if not folder_host_path.startswith( subtree_to_check):
             print( f"Skip {folder_host_path = } {folder_id = } not part of {subtree_to_check = }")
         else:
