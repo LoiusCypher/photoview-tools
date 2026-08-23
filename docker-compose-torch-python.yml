@@ -9,7 +9,8 @@ services:
     privileged: true
     hostname: photoview-objectdetector-python
     container_name: photoview-objectdetector-python
-    restart: Never # unless-stopped
+    #restart: Never # unless-stopped
+    restart: no
     ports:
       - "80:80"
     environment:

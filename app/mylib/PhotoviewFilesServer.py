@@ -208,12 +208,12 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             if self._path_is_ignored( folder_path):
                 print( f"create_ignored_pattern: {host_id = } deleting {folder_path = }")
                 for file_id, file_name in self.files( conn, folder_id):
-                    print( f"create_ignored_pattern: {host_id = } {path_pattern = } deleting {folder_path = } {file_name = } {file_id = }")
+                    print( f"create_ignored_pattern: {host_id = } deleting {folder_path = } {file_name = } {file_id = }")
                     self.delete_file_id( conn, file_id)
                 self.delete_folder_id( conn, folder_id)
             for file_id, file_name in self.files( conn, folder_id):
                 if self._path_is_ignored( os.path.join( folder_path, file_name)):
-                    print( f"create_ignored_pattern: {host_id = } {path_pattern = } deleting {folder_path = }/{file_name = }")
+                    print( f"create_ignored_pattern: {host_id = } deleting {folder_path = }/{file_name = }")
                     self.delete_file_id( conn, file_id)
         return id 
 
@@ -289,21 +289,21 @@ class PhotoviewFilesServer( PhotoviewDbServer):
 
         def init_ignored_paths( conn, host_id):
             print( f"init_ignored_paths {host_id = }")
-            self.get_ignored_id( conn, '/dev/**', host_id)
-            self.get_ignored_id( conn, '/home/*/.cache/**', host_id)
-            self.get_ignored_id( conn, '/home/*/.mozilla/**', host_id)
-            self.get_ignored_id( conn, '/proc/**', host_id)
-            self.get_ignored_id( conn, '/run/**', host_id)
-            self.get_ignored_id( conn, '/swap', host_id)
-            self.get_ignored_id( conn, '/sys/**', host_id)
-            self.get_ignored_id( conn, '/tmp/**', host_id)
-            self.get_ignored_id( conn, '/usr/include/**', host_id)
-            self.get_ignored_id( conn, '/usr/lib/modules/**', host_id)
-            self.get_ignored_id( conn, '/usr/share/man/**', host_id)
-            self.get_ignored_id( conn, '/var/cache/**', host_id)
-            self.get_ignored_id( conn, '/var/lib/**', host_id)
-            self.get_ignored_id( conn, '/var/log/**', host_id)
-            self.get_ignored_id( conn, '/var/spool/**', host_id)
+            self.add_ignore_pattern( conn, '/dev/**', host_id)
+            self.add_ignore_pattern( conn, '/home/*/.cache/**', host_id)
+            self.add_ignore_pattern( conn, '/home/*/.mozilla/**', host_id)
+            self.add_ignore_pattern( conn, '/proc/**', host_id)
+            self.add_ignore_pattern( conn, '/run/**', host_id)
+            self.add_ignore_pattern( conn, '/swap', host_id)
+            self.add_ignore_pattern( conn, '/sys/**', host_id)
+            self.add_ignore_pattern( conn, '/tmp/**', host_id)
+            self.add_ignore_pattern( conn, '/usr/include/**', host_id)
+            self.add_ignore_pattern( conn, '/usr/lib/modules/**', host_id)
+            self.add_ignore_pattern( conn, '/usr/share/man/**', host_id)
+            self.add_ignore_pattern( conn, '/var/cache/**', host_id)
+            self.add_ignore_pattern( conn, '/var/lib/**', host_id)
+            self.add_ignore_pattern( conn, '/var/log/**', host_id)
+            self.add_ignore_pattern( conn, '/var/spool/**', host_id)
 
         print( f"create_host_id {host_name = } {domain = } {ipv4 = } {ipv6 = }")
         param_str = ""
