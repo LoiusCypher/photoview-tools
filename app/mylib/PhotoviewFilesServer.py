@@ -174,12 +174,12 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                     yield row[0]
                 row = cur.fetchone()
 
-    def all_folders( self, conn, host_id=None, host_path=True, all_or_deleted=None):
+    def all_folders( self, conn, host_id=None, host_path=True, all_columns=False, all_or_deleted=None):
         if host_id is None:
             host_id = self.curr_host_id
         columns = "id, path"
-        #if all_columns:
-            #columns += ", path_hash, host_id, parent_id, created_at, updated_at, deleted_at"
+        if all_columns:
+            columns += ", path_hash, host_id, parent_id, created_at, updated_at, deleted_at"
         filter_str = ""
         if all_or_deleted is None:
             filter_str = "AND deleted_at IS NULL"
@@ -193,9 +193,12 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             while not row is None:
                 #print(f"ID: {row[0]}, Path: {row[1]}")
                 if host_path:
-                    yield row[0], os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( row[1], '/')))
+                    if len(row) > 2:
+                         yield row[0], os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( row[1], '/'))), row[2:]
+                    else:
+                         yield row[0], os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( row[1], '/')))
                 else:
-                    yield row[0], row[1]
+                    yield row
                 row = cur.fetchone()
 
     def all_files( self, conn, folder_id=None, all_columns=False, all_or_deleted=None):
@@ -239,13 +242,13 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             if host_id == "*":
                 print( f"No host_id")
                 for host_row in self.all_hosts( conn, all_columns=True):
-                    print( f"{host_row = }")
+                    print( f"{host_row[0]}: {host_row[1]}.{host_row[2]}  IPv4 {host_row[3]}  IPv6 {host_row[4]}  {host_row[5]}  {host_row[6]}")
             else:
                 if host_id is None:
                     host_id = self.curr_host_id
                 for host_row in self.all_hosts( conn, all_columns=True):
                     if host_id == host_row[0]:
-                        print( f"{host_row = }")
+                        print( f"{host_row[0]}: {host_row[1]}.{host_row[2]}  IPv4 {host_row[3]}  IPv6 {host_row[4]}  {host_row[5]}  {host_row[6]}")
 
     def list_ignore_patterns( self, host_id=None, all_or_deleted=None):
         if self.debug_entry or self.debug_ignore: print( f"list_ignore_patterns {host_id = } {all_or_deleted = }")
@@ -268,14 +271,16 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                 print( f"No host_id")
                 for host_id in self.all_hosts( conn):
                     print( f"{host_id = }")
-                    for folder in self.all_folders( conn, host_id, host_path=False, all_or_deleted=all_or_deleted):
-                        print( f"{folder = }")
+                    for folder in self.all_folders( conn, host_id, host_path=False, all_columns=True, all_or_deleted=all_or_deleted):
+                        print( f"{folder[1]}")
+                        print( f"    Host {folder[3]}: {folder[4]}-> {folder[0]}  #{folder[2]}  {folder[5]}  {folder[6]}  {folder[7]}")
             else:
                 if host_id is None:
                     host_id = self.curr_host_id
                 #print( f"list_folders {host_id = }")
-                for folder in self.all_folders( conn, host_id, host_path=False, all_or_deleted=all_or_deleted):
-                    print( f"{folder = }")
+                for folder in self.all_folders( conn, host_id, host_path=False, all_columns=True, all_or_deleted=all_or_deleted):
+                    print( f"{folder[1]}")
+                    print( f"    Host {folder[3]}: {folder[4]}-> {folder[0]}  #{folder[2]}  {folder[5]}  {folder[6]}  {folder[7]}")
 
     def list_files( self, host_id=None, all_or_deleted=None):
         with self.new_conn() as conn:
@@ -375,23 +380,27 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             return rows[0][0]
         return self.create_host_id( conn, host_name, domain, ipv4, ipv6)
 
-    def add_default_ignored_paths( self, conn, host_id):
-        print( f"init_ignored_paths {host_id = }")
-        self._add_ignore_pattern( conn, '/dev/**', host_id)
-        self._add_ignore_pattern( conn, '/home/*/.cache/**', host_id)
-        self._add_ignore_pattern( conn, '/home/*/.mozilla/**', host_id)
-        self._add_ignore_pattern( conn, '/proc/**', host_id)
-        self._add_ignore_pattern( conn, '/run/**', host_id)
-        self._add_ignore_pattern( conn, '/swap', host_id)
-        self._add_ignore_pattern( conn, '/sys/**', host_id)
-        self._add_ignore_pattern( conn, '/tmp/**', host_id)
-        self._add_ignore_pattern( conn, '/usr/include/**', host_id)
-        self._add_ignore_pattern( conn, '/usr/lib/modules/**', host_id)
-        self._add_ignore_pattern( conn, '/usr/share/man/**', host_id)
-        self._add_ignore_pattern( conn, '/var/cache/**', host_id)
-        self._add_ignore_pattern( conn, '/var/lib/**', host_id)
-        self._add_ignore_pattern( conn, '/var/log/**', host_id)
-        self._add_ignore_pattern( conn, '/var/spool/**', host_id)
+    def update_default_ignored_paths( self, conn, host_id):
+        #print(f"update_default_ignored_paths: {host_id = } ")
+        if host_id is None:
+            host_id = self.curr_host_id
+        assert host_id == self.curr_host_id
+        patterns = {
+            'default':
+                 [ '/dev/**', '/home/*/.cache/**', '/home/*/.mozilla/**', '/proc/**', '/run/**', '/swap', '/sys/**', '/tmp/**', '/usr/include/**',
+                   '/usr/lib/modules/**', '/usr/share/man/**', '/var/cache/**', '/var/lib/**', '/var/log/**', '/var/spool/**', '/var/tmp/**', ],
+            'debian-1':
+                 [ '/dev/**', ],
+            'debian-3':
+                 [ '/dev/**', ],
+            'ssstore':
+                 [ '/dev/**', ],
+        }
+        for sel in [ 'default', self.curr_host_name, ]:
+            #print(f"update_default_ignored_paths: {sel = } ")
+            for pattern in patterns[sel]:
+                #print(f"update_default_ignored_paths: {pattern = } ")
+                self._add_ignore_pattern( conn, pattern, host_id)
 
     def create_host_id( self, conn, host_name = None, domain = None, ipv4 = None, ipv6 = None) -> int:
         print( f"create_host_id {host_name = } {domain = } {ipv4 = } {ipv6 = }")
@@ -425,20 +434,23 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             rows = cur.fetchall()
             cur.close()
             conn.commit()
-            self.add_default_ignored_paths( conn, rows[0][0])
+            self.update_default_ignored_paths( conn, rows[0][0])
             return rows[0][0]
         except mariadb.Error as e:
             print(f"Error connecting to MariaDB: (create_host_id) {e}")
             sys.exit(1)
 
     def set_host( self, root_in_container, host_name):
+        #print( f"set_host {root_in_container = } {host_name = }")
+        self.curr_host_name = host_name
+        self.root_in_container = os.path.abspath( root_in_container)
         with self.new_conn() as conn:
-            #print( f"set_host {root_in_container = } {host_name = }")
-            self.root_in_container = os.path.abspath( root_in_container)
             self.curr_host_id = self.get_host_id( conn, host_name=host_name)
             #print( f"set_host {self.curr_host_id = }")
             self.curr_host_ignored_patterns = [row[1] for row in self.all_ignores( conn, self.curr_host_id, all_columns=True)]
             #print( self.curr_host_ignored_patterns)
+
+        
 
     """ IGNORES
     """
@@ -460,7 +472,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
 
     def _clean_up_ignored( self, conn, host_id):
         for folder_id, folder_path in self.all_folders( conn, host_id, host_path=False):
-            #if self.debug: print( f"create_ignored_pattern: {host_id = } {path_pattern = } {folder_path = }")
+            #if self.debug: print( f"_clean_up_ignored: {host_id = } {path_pattern = } {folder_path = }")
             if self._path_is_ignored( folder_path):
                 print( f"_delete_ignored: {host_id = } deleting {folder_path = }")
                 for file_id, file_name in self.all_files( conn, folder_id):
@@ -483,10 +495,10 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                 rows = cur.fetchall()
                 assert len( rows) == 1
                 conn.commit()
-                id = rows[0][0]
             except mariadb.Error as e:
                 print(f"Error connecting to MariaDB: (create_ignored_folder) {e}")
                 sys.exit(1)
+        id = rows[0][0]
         self._clean_up_ignored( conn, host_id)
         return id 
 
@@ -501,11 +513,10 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             self._add_ignore_pattern( conn, path_pattern, host_id)
 
     def _add_ignore_pattern( self, conn, path_pattern, host_id):
-        #if self.debug_entry or self.debug_ignore: print( f"_add_ignore_pattern {path_pattern = } {host_id = }")
-        with self.new_conn() as conn:
-            id = self.fetch_ignored_id( conn, path_pattern, host_id)
-            if id is None:
-                id = self.create_ignored_pattern( conn, host_id, path_pattern)
+        if self.debug_entry or self.debug_ignore: print( f"_add_ignore_pattern {path_pattern = } {host_id = }")
+        id = self.fetch_ignored_id( conn, path_pattern, host_id)
+        if id is None:
+            id = self.create_ignored_pattern( conn, host_id, path_pattern)
         return id
 
     def remove_ignore_pattern( self, path_pattern, host_id=None):

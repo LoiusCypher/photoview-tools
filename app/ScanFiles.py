@@ -14,48 +14,44 @@ photo_db_name = "photoview"
 
 def check_for_removed_items( db, container_subtree_to_check):
     #print( f"{root_in_container = }")
-    conn = db.new_conn()
-    assert conn is not None
     if container_subtree_to_check is None:
         container_subtree_to_check = db.root_in_container
-    for folder_id, folder_container_path in db.all_folders( conn):
-        if not folder_container_path.startswith( container_subtree_to_check):
-            print( f"Skip {folder_container_path = } {folder_id = } not part of {container_subtree_to_check = }")
-        else:
-            #print( f"{db.root_in_container = } {folder_container_path = } {folder_id = }")
-            if not os.path.isdir( folder_container_path):
-                print( f"delete_folder {folder_id} {folder_container_path}")
-                db.delete_folder_id( conn, folder_id)
+    with db.new_conn() as conn:
+        for folder_id, folder_container_path in db.all_folders( conn):
+            if folder_container_path.startswith( container_subtree_to_check):
+                #print( f"{db.root_in_container = } {folder_container_path = } {folder_id = }")
+                if os.path.isdir( folder_container_path):
+                    for file_id, file_name in db.all_files( conn, folder_id=folder_id):
+                        #print( f"{root_in_container = } {folder_path = } {file_name = }")
+                        #print( f"{os.path.join( folder_path, file_name) = }")
+                        if not os.path.isfile( os.path.join( folder_container_path, file_name)):
+                            print( f"delete_file {file_id} {folder_container_path}//{file_name}")
+                            db.delete_file_id( conn, file_id)
+                else:
+                    print( f"delete_folder not isdir {folder_id} {folder_container_path}")
+                    db.delete_folder_id( conn, folder_id)
             else:
-                for file_id, file_name in db.all_files( conn, folder_id=folder_id):
-                    #print( f"{root_in_container = } {folder_path = } {file_name = }")
-                    #print( f"{os.path.join( folder_path, file_name) = }")
-                    if not os.path.isfile( os.path.join( folder_container_path, file_name)):
-                        print( f"delete_file {file_id} {folder_container_path}//{file_name}")
-                        db.delete_file_id( conn, file_id)
-    conn.close()
+                print( f"Skip {folder_container_path = } {folder_id = } not part of {container_subtree_to_check = }")
 
 def check_for_new_or_updated_items( db, container_subtree_to_update, sha):
     #print( f"{container_subtree_to_update = }")
-    conn = db.new_conn()
-    assert conn is not None
     if container_subtree_to_update is None:
         container_subtree_to_update = db.root_in_container
-    for curr, dirs, files in os.walk( container_subtree_to_update):
-        folder_id, host_folder = db.get_folder_id( conn, curr)
-        #print( f"{curr = } {folder_id = } {files = }")
-        if folder_id is not None:
-            for file_name in files:
-                file_path = os.path.join( curr, file_name)
-                file_stat = os.lstat( file_path)
-                file_id = db.get_file_id( conn, folder_id, file_name, file_stat, host_folder, sha)
-                #print( curr, file_name, file_id)
-            #print( f"{curr = } {dirs = }")
-            for sub_dir in dirs:
-                folder_path = os.path.join( curr, sub_dir)
-                folder_id, _ = db.get_folder_id( conn, folder_path)
-                #print( curr, sub_dir, folder_id)
-    conn.close()
+    with db.new_conn() as conn:
+        for curr, dirs, files in os.walk( container_subtree_to_update):
+            folder_id, host_folder = db.get_folder_id( conn, curr)
+            #print( f"{curr = } {folder_id = } {files = }")
+            if folder_id is not None:
+                for file_name in files:
+                    file_path = os.path.join( curr, file_name)
+                    file_stat = os.lstat( file_path)
+                    file_id = db.get_file_id( conn, folder_id, file_name, file_stat, host_folder, sha)
+                    #print( curr, file_name, file_id)
+                #print( f"{curr = } {dirs = }")
+                for sub_dir in dirs:
+                    folder_path = os.path.join( curr, sub_dir)
+                    folder_id, _ = db.get_folder_id( conn, folder_path)
+                    #print( curr, sub_dir, folder_id)
 
 host_fs='/host_fs'
 
@@ -73,24 +69,25 @@ def main() -> int:
     parser_count = subparsers.add_parser('count')
     parser_check = subparsers.add_parser('check')
     parser_hosts = subparsers.add_parser('hosts')
-    parser_init = subparsers.add_parser('init')
+    #parser_init = subparsers.add_parser('init')
     # ignore
-    parser_ignore.add_argument( "pattern", help="Path pattern to ignore",)
+    parser_ignore.add_argument( "pattern", nargs='?', help="Path pattern to ignore",)
     parser_ignore.add_argument( "--remove", action="store_true", help="Remove pattern from ignore list in db",)
+    parser_ignore.add_argument( "--update-defaults", action="store_true", help="Update patterns from defaults",)
     # list
     group = parser_list.add_mutually_exclusive_group()
     group.add_argument( "--hosts", action="store_true", help="Only list hosts in db",)
     group.add_argument( "--ignores", action="store_true", help="Only list ignore patterns in db",)
     group.add_argument( "--folders", action="store_true", help="Only list folders in db",)
     group.add_argument( "--files", action="store_true", help="Only list files in db",)
-    parser_list.add_argument( "--deleted", action="store_false", help="List deleted items",)
+    parser_list.add_argument( "--deleted", action="store_true", help="List deleted items",)
     # count
     group = parser_count.add_mutually_exclusive_group()
     group.add_argument( "--hosts", action="store_true", help="Only list hosts in db",)
     group.add_argument( "--ignores", action="store_true", help="Only list ignore patterns in db",)
     group.add_argument( "--folders", action="store_true", help="Only list folders in db",)
     group.add_argument( "--files", action="store_true", help="Only list files in db",)
-    parser_count.add_argument( "--deleted", action="store_false", help="Count deleted items",)
+    parser_count.add_argument( "--deleted", action="store_true", help="Count deleted items",)
     # check
     parser_check.add_argument( "--removed", action="store_true", help="Check for removed items",)
     parser_check.add_argument( "--new-or-changed", action="store_true", help="Check for new or changed items",)
@@ -122,34 +119,44 @@ def main() -> int:
     db_server.set_host( host_fs, args.host_name)
 
     if args.subcommand == "ignore":
-        if args.remove:
-            db_server.remove_ignore_pattern( args.pattern)
+        if args.update_defaults:
+            with db_server.new_conn() as conn:
+                db_server.update_default_ignored_paths( conn, None)
         else:
-            db_server.add_ignore_pattern( args.pattern)
+            if args.remove:
+                db_server.remove_ignore_pattern( args.pattern)
+            else:
+                db_server.add_ignore_pattern( args.pattern)
 
     if args.subcommand == "list":
+        _del = None
+        if args.deleted:
+            _del = False
         if args.hosts or not (args.ignores or args.folders or args.files):
-            db_server.list_hosts( all_or_deleted=args.deleted)
+            db_server.list_hosts( all_or_deleted=_del)
         if args.ignores or not (args.hosts or args.folders or args.files):
-            db_server.list_ignore_patterns( all_or_deleted=args.deleted)
+            db_server.list_ignore_patterns( all_or_deleted=_del)
         if args.folders or not (args.hosts or args.ignores or args.files):
-            db_server.list_folders( all_or_deleted=args.deleted)
+            db_server.list_folders( all_or_deleted=_del)
         if args.files or not (args.hosts or args.ignores or args.folders):
-            db_server.list_files( all_or_deleted=args.deleted)
+            db_server.list_files( all_or_deleted=_del)
 
-    if args.subcommand == "host":
+    if args.subcommand == "hosts":
         #if args.list_all:
             db_server.list_hosts( host_id='*')
 
     if args.subcommand == "count":
+        _del = None
+        if args.deleted:
+            _del = False
         if args.hosts or not (args.ignores or args.folders or args.files):
-            db_server.count_hosts( args.deleted)
+            db_server.count_hosts( all_or_deleted=_del)
         if args.ignores or not (args.hosts or args.folders or args.files):
-            db_server.count_ignores( args.deleted)
+            db_server.count_ignores( all_or_deleted=_del)
         if args.folders or not (args.hosts or args.ignores or args.files):
-            db_server.count_folders( args.deleted)
+            db_server.count_folders( all_or_deleted=_del)
         if args.files or not (args.hosts or args.ignores or args.folders):
-            db_server.count_files( args.deleted)
+            db_server.count_files( all_or_deleted=_del)
 
     if args.subcommand == "check":
         if args.removed or not args.new_or_changed:
@@ -160,12 +167,6 @@ def main() -> int:
             check_for_new_or_updated_items( db_server, container_subtree, args.sha)
 
     return 0
-
-    print( f"Only Deleted")
-    db_server.list_folders( conn, all_or_deleted=False)
-    db_server.list_files( conn, all_or_deleted=False)
-
-    return -2
 
     detection = 2
     last_id = -1
