@@ -9,10 +9,8 @@ files_db_name = "files_collector"
 tools_db_name = "object_detector"
 photo_db_name = "photoview"
 
-import os
-from os.path import join, getsize
-
-import hashlib
+#import os
+#from os.path import join, getsize
 
 def check_for_removed_items( db, host_id, subtree_to_check=None):
     #print( f"{host_id = } {root_in_container = }")
@@ -38,7 +36,7 @@ def check_for_removed_items( db, host_id, subtree_to_check=None):
                         db.delete_file_id( conn, file_id)
     conn.close()
 
-def check_for_new_or_updated_items( db, host_id, subtree_to_update=None):
+def check_for_new_or_updated_items( db, host_id, subtree_to_update=None, sha=False):
     #print( f"{host_id = } {subtree_to_update = }")
     conn = db.new_conn()
     assert conn is not None
@@ -51,7 +49,7 @@ def check_for_new_or_updated_items( db, host_id, subtree_to_update=None):
             for file_name in files:
                 file_path = os.path.join( curr, file_name)
                 file_stat = os.lstat( file_path)
-                file_id = db.get_file_id( conn, folder_id, file_name, file_stat, host_folder)
+                file_id = db.get_file_id( conn, folder_id, file_name, file_stat, host_folder, sha)
                 #print( curr, file_name, file_id)
             #print( f"{curr = } {dirs = }")
             for sub_dir in dirs:
@@ -65,6 +63,8 @@ host_fs='/host_fs'
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument( "--version", "-V", action="store_true", help="show version")
+    parser.add_argument( "--host-name", required=True, help="Host name")
+    parser.add_argument( "--host-ipv4", required=True, help="Host IPV4 address")
     subparsers = parser.add_subparsers(dest='subcommand')
     subparsers.required = True 
     parser_ignore = subparsers.add_parser('ignore')
@@ -87,6 +87,7 @@ def main() -> int:
     parser_check.add_argument( "--removed", action="store_true", help="Check for removed items",)
     parser_check.add_argument( "--new-or-changed", action="store_true", help="Check for new or changed items",)
     parser_check.add_argument( "--subtree", "-S", help="Scan partial subtree",)
+    parser_check.add_argument( "--sha", action="store_true", help="Compute SHA3 checksums",)
     parser.add_argument( "--debug", "-D", action="store_true", help="enable debug output")
     parser.add_argument( "--recreate-database", "-R", action="store_true", help="Recreate database",)
     args = parser.parse_args()
@@ -104,10 +105,7 @@ def main() -> int:
                                       files_db_name=files_db_name,
                                       recreate=args.recreate_database)
 
-    conn = db_server.new_conn()
-    if conn is None: return
-
-    host_id = db_server.set_host( conn, host_fs, host_name="aaa", ipv4="192.168.2.227")
+    host_id = db_server.set_host( host_fs, host_name=args.host_name, ipv4=args.host_ipv4)
 
     print( f"{args = }")
 
@@ -138,12 +136,10 @@ def main() -> int:
     if args.subcommand == "check":
         if args.removed or not args.new_or_changed:
             print( "check_recorded_tree")
-            #check_for_removed_items( db_server, host_id, host_fs, subtree)
             check_for_removed_items( db_server, host_fs, subtree)
         if not args.removed or args.new_or_changed:
             print( "update_recorded_tree")
-            #check_for_new_or_updated_items( db_server, host_id, host_fs, subtree)
-            check_for_new_or_updated_items( db_server, host_fs, subtree)
+            check_for_new_or_updated_items( db_server, host_fs, subtree_to_update=subtree, sha=args.sha)
 
     return 0
 

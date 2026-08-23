@@ -19,6 +19,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
         self.debug = debug
         self.debug_entry = debug_entry
         self.debug_ignore = debug_ignore
+        self.debug_ignored = debug_ignore
 
     def create_files_db( self, recreate):
 
@@ -93,7 +94,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                             " `file_name` varchar(256) NOT NULL,"
                             " `folder_id` bigint(20) NOT NULL,"
                             " `length` bigint(20) NOT NULL,"
-                            " `file_hash` char(128) NOT NULL,"
+                            " `file_hash` char(128),"
                             " `ctime_ns` bigint NOT NULL,"
                             " `mtime_ns` bigint NOT NULL,"
                             " `ctime` datetime(3) NOT NULL,"
@@ -136,13 +137,14 @@ class PhotoviewFilesServer( PhotoviewDbServer):
     """ User routines start here
     """
 
-    def set_host( self, conn, root_in_container, host_name = None, domain = None, ipv4 = None, ipv6 = None) -> int:
-        #print( f"set_host {root_in_container = } {host_name = }")
-        self.root_in_container = os.path.abspath( root_in_container)
-        self.curr_host_id = self.get_host_id( conn, host_name, domain, ipv4, ipv6)
-        #print( f"set_host {self.curr_host_id = }")
-        self.curr_host_ignored_patterns = [row[1] for row in self.ignores( conn, self.curr_host_id)]
-        #print( self.curr_host_ignored_patterns)
+    def set_host( self, root_in_container, host_name = None, domain = None, ipv4 = None, ipv6 = None) -> int:
+        with self.new_conn() as conn:
+            #print( f"set_host {root_in_container = } {host_name = }")
+            self.root_in_container = os.path.abspath( root_in_container)
+            self.curr_host_id = self.get_host_id( conn, host_name, domain, ipv4, ipv6)
+            #print( f"set_host {self.curr_host_id = }")
+            self.curr_host_ignored_patterns = [row[1] for row in self.ignores( conn, self.curr_host_id)]
+            #print( self.curr_host_ignored_patterns)
 
     def get_host_id( self, conn, host_name = None, domain = None, ipv4 = None, ipv6 = None) -> int:
         self.curr_host_id = None
@@ -204,7 +206,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
         for folder_id, folder_path in self.folders( conn, host_id, host_path=False):
             #if self.debug: print( f"create_ignored_pattern: {host_id = } {path_pattern = } {folder_path = }")
             if self._path_is_ignored( folder_path):
-                print( f"create_ignored_pattern: {host_id = } {path_pattern = } deleting {folder_path = }")
+                print( f"create_ignored_pattern: {host_id = } deleting {folder_path = }")
                 for file_id, file_name in self.files( conn, folder_id):
                     print( f"create_ignored_pattern: {host_id = } {path_pattern = } deleting {folder_path = } {file_name = } {file_id = }")
                     self.delete_file_id( conn, file_id)
@@ -218,7 +220,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
     def ignores( self, conn, host_id, all_or_deleted=None):
         cur = conn.cursor()
         cur.execute( f"SELECT id, path_pattern FROM `{self.files_db_name}`.`ignored_paths`"
-                     f" WHERE host_id = ? ;", ( host_id, ))
+                     f" WHERE host_id = ? ORDER BY path_pattern;", ( host_id, ))
         row = cur.fetchone()
         while not row is None:
             #print(f"ID: {row[0]}, Path: {row[1]}")
@@ -295,6 +297,12 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             self.get_ignored_id( conn, '/swap', host_id)
             self.get_ignored_id( conn, '/sys/**', host_id)
             self.get_ignored_id( conn, '/tmp/**', host_id)
+            self.get_ignored_id( conn, '/usr/include/**', host_id)
+            self.get_ignored_id( conn, '/usr/share/man/**', host_id)
+            self.get_ignored_id( conn, '/var/cache/**', host_id)
+            self.get_ignored_id( conn, '/var/lib/**', host_id)
+            self.get_ignored_id( conn, '/var/log/**', host_id)
+            self.get_ignored_id( conn, '/var/spool/**', host_id)
 
         print( f"create_host_id {host_name = } {domain = } {ipv4 = } {ipv6 = }")
         param_str = ""
@@ -399,7 +407,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
         if host_id is None:
             host_id = self.curr_host_id
             if self._path_is_ignored( host_path):
-                print( f"get_folder_id: folder IGNORED {abs_path = } {host_path = } {host_hash = }")
+                if self.debug_ignored: print( f"get_folder_id: folder IGNORED {abs_path = } {host_path = } {host_hash = }")
                 return None, host_path
         #print( f"{abs_path = } {host_path = } {host_hash = }")
         with conn.cursor() as cur:
@@ -509,14 +517,14 @@ class PhotoviewFilesServer( PhotoviewDbServer):
     """ public files
     """
 
-    def get_file_id( self, conn, folder_id, file_name, file_stat, host_path) -> int:
+    def get_file_id( self, conn, folder_id, file_name, file_stat, host_path, compute_sha) -> int:
         #print( f"get_file_id {folder_id = } {file_name = } {host_path = }")
         if self._path_is_ignored( os.path.join( host_path, file_name)):
-            print( f"get_file_id: file IGNORED {host_path = } {file_name = }")
+            if self.debug_ignored: print( f"get_file_id: file IGNORED {host_path = } {file_name = }")
             return None
         with conn.cursor() as cur:
             try:
-                cur.execute( f"SELECT id, length, mtime_ns FROM `{self.files_db_name}`.`files`"
+                cur.execute( f"SELECT id, length, mtime_ns, file_hash FROM `{self.files_db_name}`.`files`"
                              f" WHERE folder_id = ? AND file_name = ? AND deleted_at IS NULL"
                              f" ;", ( folder_id, file_name, ))
                 rows = cur.fetchall()
@@ -527,14 +535,32 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                 #print( f"get_file_id: exists {rows[0] = }")
                 if file_stat.st_size == rows[0][1] and file_stat.st_mtime_ns == rows[0][2]:
                     #print( f"get_file_id: UNCHANGED file_id {rows[0][0]} {file_name} ")
+                    if compute_sha and (rows[0][3] == '-1' or rows[0][3] is None):
+                        file_hash = hashlib.sha3_512( host_path.encode()).hexdigest()
+                        print( f"get_file_id: Updating file_hash {rows[0][0]} {host_path}/{file_name}")
+                        try:
+                            cur.execute( f"UPDATE `{self.files_db_name}`.`files`"
+                                         f" SET file_hash = ?"
+                                         f" WHERE id = ? "
+                                         f" ;", ( file_hash, rows[0][0], ))
+                            row_cnt = cur.rowcount
+                            #print( f"{row_cnt = }")
+                            assert row_cnt == 1
+                        except mariadb.Error as e:
+                            print( f"Error updating jash_file: (get_file_id) {e}")
+                            sys.exit(1)
+                        conn.commit()
                     return rows[0][0]
                 # file was changed
-                print( f"get_file_id: CHANGED file_id {rows[0][0]} {file_name} ")
+                print( f"get_file_id: CHANGED file_id {rows[0][0]} {host_path}/{file_name}")
                 self.delete_file_id( conn, rows[0][0])
-        return self.create_file_id( conn, folder_id, file_name, file_stat)
+        file_hash = None
+        if compute_sha:
+            file_hash = hashlib.sha3_256( host_path.encode()).hexdigest()
+        return self.create_file_id( conn, folder_id, file_name, file_stat, file_hash)
 
-    def create_file_id( self, conn, folder_id, file_name, file_stat) -> int:
-        print( f"create_file_id {folder_id = } {file_name = } {file_stat = }")
+    def create_file_id( self, conn, folder_id, file_name, file_stat, file_hash) -> int:
+        print( f"create_file_id {folder_id = } {file_name = } {file_stat = } {file_hash = }")
         try:
             cur = conn.cursor()
             #print( f"{datetime.fromtimestamp( file_stat.st_ctime_ns / 1e9, tz=timezone.utc) = }")
@@ -546,7 +572,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                                                file_stat.st_ctime_ns, file_stat.st_mtime_ns,
                                                datetime.fromtimestamp( file_stat.st_ctime_ns / 1e9, tz=timezone.utc), 
                                                datetime.fromtimestamp( file_stat.st_mtime_ns / 1e9, tz=timezone.utc), 
-                                               -1, ))
+                                               file_hash, ))
             row = cur.fetchone()
             assert not row is None
             cur.close()
