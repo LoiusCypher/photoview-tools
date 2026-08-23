@@ -1,5 +1,5 @@
-#ARG BASE=python:3.12-trixie
-ARG BASE=python:3.14-trixie
+ARG BASE=python:3.12-trixie
+# requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
 FROM ${BASE} AS retinarcnn-python
 
 RUN apt update && apt upgrade -y && apt install -y qtwayland5 xdg-utils dbus-x11 libxcb-cursor0 libxcb-glx0 libgl1-mesa-dev
