@@ -137,174 +137,259 @@ class PhotoviewFilesServer( PhotoviewDbServer):
     """ User routines start here
     """
 
-    def set_host( self, root_in_container, host_name = None, domain = None, ipv4 = None, ipv6 = None) -> int:
-        with self.new_conn() as conn:
-            #print( f"set_host {root_in_container = } {host_name = }")
-            self.root_in_container = os.path.abspath( root_in_container)
-            self.curr_host_id = self.get_host_id( conn, host_name, domain, ipv4, ipv6)
-            #print( f"set_host {self.curr_host_id = }")
-            self.curr_host_ignored_patterns = [row[1] for row in self.ignores( conn, self.curr_host_id)]
-            #print( self.curr_host_ignored_patterns)
-
-    def get_host_id( self, conn, host_name = None, domain = None, ipv4 = None, ipv6 = None) -> int:
-        self.curr_host_id = None
-        cur = conn.cursor()
-        try:
-            if host_name is None:
-                if ipv4 is None:
-                    if ipv6 is None:
-                        print( 'At least one host attribute must be specified')
-                        return None
-                    else:
-                        cur.execute(f"SELECT id" f" FROM `{self.files_db_name}`.`hosts`" f" WHERE ipv6 = ? " f" ;", ( ipv6, ))
-                else:
-                    cur.execute(f"SELECT id" f" FROM `{self.files_db_name}`.`hosts`" f" WHERE ipv4 = ? " f" ;", ( ipv4, ))
-            else:
-                if domain is None:
-                    cur.execute(f"SELECT id" f" FROM `{self.files_db_name}`.`hosts`" f" WHERE name = ? " f" ;", ( host_name, ))
-                else:
-                    cur.execute(f"SELECT id" f" FROM `{self.files_db_name}`.`hosts`" f" WHERE name = ? AND domain = ?" f" ;", ( host_name, domain, ))
-            row = cur.fetchone()
-            if not row is None:
-                #print(f"get_host_id: host_id {row[0]} ")
-                return row[0]
-        except mariadb.Error as e:
-            print(f"Error getting last media_id for detection {detection}: {e}")
-            sys.exit(1)
-        return self.create_host_id( conn, host_name, domain, ipv4, ipv6)
-
-    def fetch_ignored_id( self, conn, path_pattern, host_id):
-        #print( f"ignored_id {path_pattern = } {host_id = }")
-        with conn.cursor() as cur:
-            try:
-                cur.execute( f"SELECT id FROM `{self.files_db_name}`.`ignored_paths` WHERE host_id = ? AND path_pattern = ? ;", ( host_id, path_pattern, ))
-                rows = cur.fetchall()
-                print( f"ignored_id {len(rows) = } {path_pattern = } {host_id = }")
-                assert len( rows) <= 1
-                if len( rows) == 1:
-                    #print( f"fetch_ignored_id: folder_id {rows[0][0]} ")
-                    return rows[0][0]
-            except mariadb.Error as e:
-                print( f"Error fetch_ignored_id: {e}")
-        return None
-
-    def create_ignored_pattern( self, conn, host_id, path_pattern):
-        if self.debug_entry or self.debug_ignore: print( f"create_ignored_pattern {host_id = } {path_pattern = }")
-        with conn.cursor() as cur:
-            try:
-                cur.execute( f"INSERT INTO `{self.files_db_name}`.`ignored_paths`" \
-                             f" ( host_id, path_pattern, created_at, updated_at )" \
-                             f" VALUES ( ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3) ) " \
-                             f" RETURNING id ;", ( host_id, path_pattern, ))
-                rows = cur.fetchall()
-                assert len( rows) == 1
-                conn.commit()
-                id = rows[0][0]
-            except mariadb.Error as e:
-                print(f"Error connecting to MariaDB: (create_ignored_folder) {e}")
-                sys.exit(1)
-        for folder_id, folder_path in self.folders( conn, host_id, host_path=False):
-            #if self.debug: print( f"create_ignored_pattern: {host_id = } {path_pattern = } {folder_path = }")
-            if self._path_is_ignored( folder_path):
-                print( f"create_ignored_pattern: {host_id = } deleting {folder_path = }")
-                for file_id, file_name in self.files( conn, folder_id):
-                    print( f"create_ignored_pattern: {host_id = } deleting {folder_path = } {file_name = } {file_id = }")
-                    self.delete_file_id( conn, file_id)
-                self.delete_folder_id( conn, folder_id)
-            for file_id, file_name in self.files( conn, folder_id):
-                if self._path_is_ignored( os.path.join( folder_path, file_name)):
-                    print( f"create_ignored_pattern: {host_id = } deleting {folder_path = }/{file_name = }")
-                    self.delete_file_id( conn, file_id)
-        return id 
-
-    def ignores( self, conn, host_id, all_or_deleted=None):
-        cur = conn.cursor()
-        cur.execute( f"SELECT id, path_pattern FROM `{self.files_db_name}`.`ignored_paths`"
-                     f" WHERE host_id = ? ORDER BY path_pattern;", ( host_id, ))
-        row = cur.fetchone()
-        while not row is None:
-            #print(f"ID: {row[0]}, Path: {row[1]}")
-            yield row[0], row[1]
-            row = cur.fetchone()
-        #print( f"No more ignores in database")
-
-    """ public ignore patterns
+    """ all_ =======================================================
     """
 
-    def add_ignore_pattern( self, path_pattern, host_id=None):
-        if self.debug_entry or self.debug_ignore: print( f"add_ignore_pattern {path_pattern = } {host_id = }")
-        if host_id is None:
-            host_id = self.curr_host_id
-        with self.new_conn() as conn:
-            id = self.fetch_ignored_id( conn, path_pattern, host_id)
-            if id is None:
-                id = self.create_ignored_pattern( conn, host_id, path_pattern)
-        return id
+    def all_hosts( self, conn, all_columns=False):
+        columns = "id"
+        if all_columns:
+            columns += ", name, domain, ipv4, ipv6, created_at, updated_at"
+        with conn.cursor() as cur:
+            cur.execute( f"SELECT {columns} FROM `{self.files_db_name}`.`hosts` ;")
+            row = cur.fetchone()
+            while not row is  None:
+                if all_columns:
+                    #print(f"ID: {row[0]}, Name: {row[1]}, Domain: {row[2]}, IPv4: {row[3]}, IPv6: {row[4]}, Created: {row[5]}, Updated: {row[6]}")
+                    yield row
+                else:
+                    #print(f"ID: {row[0]})
+                    yield row[0]
+                row = cur.fetchone()
 
-    def remove_ignore_pattern( self, path_pattern, host_id=None):
-        if self.debug_entry or self.debug_ignore: print( f"remove_ignore_pattern {path_pattern = } {host_id = }")
-        if host_id is None:
-            host_id = self.curr_host_id
+    def all_ignores( self, conn, host_id, all_columns=False, all_or_deleted=None):
+        columns = "id"
+        if all_columns:
+            columns += ", path_pattern, host_id, created_at, updated_at"
+        with conn.cursor() as cur:
+            cur.execute( f"SELECT {columns} FROM `{self.files_db_name}`.`ignored_paths`"
+                         f" WHERE host_id = ? ORDER BY path_pattern;", ( host_id, ))
+            row = cur.fetchone()
+            while not row is None:
+                #print(f"ID: {row[0]}, Path: {row[1]}")
+                if all_columns:
+                    #print(f"ID: {row[0]}, path_pattern: {row[1]}, host_id: {row[2]}, Created: {row[3]}, Updated: {row[4]}")
+                    yield row
+                else:
+                    #print(f"ID: {row[0]}")
+                    yield row[0]
+                row = cur.fetchone()
+
+    def all_folders( self, conn, host_id, host_path=True, all_or_deleted=None):
+        columns = "id, path"
+        #if all_columns:
+            #columns += ", path_hash, host_id, parent_id, created_at, updated_at, deleted_at"
+        filter_str = ""
+        if all_or_deleted is None:
+            filter_str = "AND deleted_at IS NULL"
+        else:
+            if not all_or_deleted:
+                filter_str = "AND deleted_at IS NOT NULL"
+        with conn.cursor() as cur:
+            cur.execute( f"SELECT {columns} FROM `{self.files_db_name}`.`folders`"
+                         f" WHERE host_id = ? {filter_str} ;", ( host_id, ))
+            row = cur.fetchone()
+            while not row is None:
+                #print(f"ID: {row[0]}, Path: {row[1]}")
+                if host_path:
+                    yield row[0], os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( row[1], '/')))
+                else:
+                    yield row[0], row[1]
+                row = cur.fetchone()
+
+    def all_files( self, conn, folder_id=None, all_columns=False, all_or_deleted=None):
+        #print( f"files {folder_id = } {all_columns = } {all_or_deleted = }")
+        if folder_id is None:
+            where_str = ""
+            param_lst = ( )
+            if all_or_deleted is None:
+                where_str = "WHERE deleted_at IS NULL"
+            else:
+                if not all_or_deleted:
+                    where_str = "WHERE deleted_at IS NOT NULL"
+        else:
+            where_str = "WHERE folder_id = ? "
+            param_lst = ( folder_id, )
+            if all_or_deleted is None:
+                where_str += "AND deleted_at IS NULL"
+            else:
+                if not all_or_deleted:
+                    where_str += "AND deleted_at IS NOT NULL"
+        columns = "id, file_name"
+        if all_columns:
+            columns += ", length, ctime_ns, mtime_ns, ctime, mtime, file_hash, created_at, updated_at, deleted_at"
+        stmt = f"SELECT {columns}" \
+               f" FROM `{self.files_db_name}`.`files`" \
+               f" {where_str} ;"
+        #print( stmt, param_lst)
+        with conn.cursor() as cur:
+            cur.execute( stmt, param_lst)
+            row = cur.fetchone()
+            while row is not None:
+                #print(f"ID: {row[0]}, File: {row[1]}")
+                yield row
+                row = cur.fetchone()
+
+    """ list_ =======================================================
+    """
+
+    def list_hosts( self, host_id=None, all_or_deleted=None):
         with self.new_conn() as conn:
-            with conn.cursor() as cur:
-                try:
-                    cur.execute( f"DELETE FROM `{self.files_db_name}`.`ignored_paths` WHERE host_id = ? AND path_pattern = ? RETURNING id ;",
-                                  ( host_id, path_pattern, ))
-                    rows = cur.fetchall()
-                    if self.debug_ignore: print( f"remove_ignore_pattern {len(rows) = } {path_pattern = } {host_id = }")
-                    assert len( rows) <= 1
-                    if len( rows) == 0:
-                        print( f"remove_ignore_pattern: no match {len(rows) = } {path_pattern = } {host_id = }")
-                        return None
-                    if self.debug_ignore: print( f"remove_ignore_pattern: id {rows[0][0]} ")
-                    conn.commit()
-                except mariadb.Error as e:
-                    print( f"Error connecting to MariaDB Privileges: {e}")
-                    sys.exit(1)
-        return rows[0][0]
+            if host_id == "*":
+                print( f"No host_id")
+                for host_row in self.all_hosts( conn, all_columns=True):
+                    print( f"{host_row = }")
+            else:
+                if host_id is None:
+                    host_id = self.curr_host_id
+                for host_row in self.all_hosts( conn, all_columns=True):
+                    if host_id == host_row[0]:
+                        print( f"{host_row = }")
 
     def list_ignore_patterns( self, host_id=None, all_or_deleted=None):
         if self.debug_entry or self.debug_ignore: print( f"list_ignore_patterns {host_id = } {all_or_deleted = }")
-        if host_id == "*":
-            print( f"No host_id")
-            conn = self.new_conn()
-            for host in self.hosts( conn):
-                print( f"{host = }")
-                for ignore in self.ignores( conn, host[0], all_or_deleted=all_or_deleted):
+        with self.new_conn() as conn:
+            if host_id == "*":
+                print( f"No host_id")
+                for host_id in self.all_hosts( conn):
+                    print( f"{host_id = }")
+                    for ignore in self.all_ignores( conn, host_id, all_columns=True, all_or_deleted=all_or_deleted):
+                        print( f"{ignore = }")
+            else:
+                if host_id is None:
+                    host_id = self.curr_host_id
+                for ignore in self.all_ignores( conn, host_id, all_columns=True, all_or_deleted=all_or_deleted):
                     print( f"{ignore = }")
-            conn.close()
-        else:
-            if host_id is None:
-                host_id = self.curr_host_id
-            #print( f"list_ignore_patterns {host_id = }")
-            conn = self.new_conn()
-            for ignore in self.ignores( conn, host_id, all_or_deleted=all_or_deleted):
-                print( f"{ignore = }")
-            conn.close()
 
-    """ host
+    def list_folders( self, host_id=None, all_or_deleted=None):
+        with self.new_conn() as conn:
+            if host_id == "*":
+                print( f"No host_id")
+                for host_id in self.all_hosts( conn):
+                    print( f"{host_id = }")
+                    for folder in self.all_folders( conn, host_id, host_path=False, all_or_deleted=all_or_deleted):
+                        print( f"{folder = }")
+            else:
+                if host_id is None:
+                    host_id = self.curr_host_id
+                #print( f"list_folders {host_id = }")
+                for folder in self.all_folders( conn, host_id, host_path=False, all_or_deleted=all_or_deleted):
+                    print( f"{folder = }")
+
+    def list_files( self, host_id=None, all_or_deleted=None):
+        with self.new_conn() as conn:
+            if host_id == "*":
+                print( f"No host_id")
+                for file_row in self.all_files( conn, all_columns=True, all_or_deleted=all_or_deleted):
+                    print( f"ID: {file_row[0]:7d} Length: {file_row[2]:9d}  CTime {file_row[5]}  MTime {file_row[6]}"
+                           f"#{file_row[7]} Del {file_row[10] if file_row[10] is not None else False}  {file_row[1]}")
+            else:
+                if host_id is None:
+                    host_id = self.curr_host_id
+                #print( f"list_files {host_id = }")
+                for folder_id, folder_path in self.all_folders( conn, host_id, host_path=False, all_or_deleted=True):
+                    for file_row in self.all_files( conn, folder_id, all_columns=True, all_or_deleted=all_or_deleted):
+                        print( f"ID: {file_row[0]:7d} Length: {file_row[2]:9d}  CTime {file_row[5]}  MTime {file_row[6]}"
+                               f"#{file_row[7]} Del {file_row[10] if file_row[10] is not None else False}  {file_row[1]}")
+
+    """ list_ =======================================================
     """
 
+    def count_hosts( self, all_or_deleted=None):
+        with self.new_conn() as conn:
+            hosts = self.all_hosts( conn, all_columns=True)
+            print( f"{len(list(hosts)) = }")
+
+    def count_ignores( self, host_id=None, all_or_deleted=None):
+        if self.debug_entry or self.debug_ignore: print( f"count_ignore_patterns {host_id = } {all_or_deleted = }")
+        with self.new_conn() as conn:
+            if host_id == "*":
+                print( f"No host_id")
+                for host_id in self.all_hosts( conn):
+                    ignores = self.all_ignores( conn, host_id, all_columns=True, all_or_deleted=all_or_deleted)
+                    print( f"{host_id = } {len(list(ignores)) = }")
+            else:
+                if host_id is None:
+                    host_id = self.curr_host_id
+                ignores = self.all_ignores( conn, host_id, all_columns=True, all_or_deleted=all_or_deleted)
+                print( f"{len(list(ignores)) = }")
+
+    def count_folders( self, host_id=None, all_or_deleted=None):
+        with self.new_conn() as conn:
+            if host_id == "*":
+                print( f"No host_id")
+                for host_id in self.all_hosts( conn):
+                    folders = self.all_folders( conn, host_id, all_or_deleted=all_or_deleted)
+                    print( f"{host_id = } {len(list(folders)) = }")
+            else:
+                if host_id is None:
+                    host_id = self.curr_host_id
+                #print( f"count_folders {host_id = }")
+                folders = self.all_folders( conn, host_id, all_or_deleted=all_or_deleted)
+                print( f"{len(list(folders)) = }")
+
+    def count_files( self, host_id=None, all_or_deleted=None):
+        with self.new_conn() as conn:
+            if host_id == "*":
+                print( f"No host_id")
+                file_rows = self.all_files( conn, all_or_deleted=all_or_deleted)
+                print( f"{host_id = } {len(list(file_rows))}")
+            else:
+                if host_id is None:
+                    host_id = self.curr_host_id
+                #print( f"count_files {host_id = }")
+                for folder_id, _ in self.all_folders( conn, host_id, all_or_deleted=True):
+                    file_rows = self.all_files( conn, folder_id, all_or_deleted=all_or_deleted)
+                    print( f"{len(list(file_rows))}")
+
+    """ PUBLIC hosts =======================================================
+    """
+
+    def get_host_id( self, conn, host_name = None, domain = None, ipv4 = None, ipv6 = None) -> int:
+        with conn.cursor() as cur:
+            try:
+                if host_name is None:
+                    if ipv4 is None:
+                        if ipv6 is None:
+                            print( 'At least one host attribute must be specified')
+                            return None
+                        else:
+                            cur.execute(f"SELECT id FROM `{self.files_db_name}`.`hosts` WHERE ipv6 = ? ;", ( ipv6, ))
+                    else:
+                        cur.execute(f"SELECT id FROM `{self.files_db_name}`.`hosts` WHERE ipv4 = ? ;", ( ipv4, ))
+                else:
+                    if domain is None:
+                        cur.execute(f"SELECT id FROM `{self.files_db_name}`.`hosts` WHERE name = ? ;", ( host_name, ))
+                    else:
+                        cur.execute(f"SELECT id FROM `{self.files_db_name}`.`hosts` WHERE name = ? AND domain = ? ;", ( host_name, domain, ))
+                rows = cur.fetchall()
+            except mariadb.Error as e:
+                print(f"Error getting last media_id for detection {detection}: {e}")
+                sys.exit(1)
+        assert len(rows) <= 1
+        if len(rows) == 1:
+            #print(f"get_host_id: host_id {rows[0]} ")
+            return rows[0]
+        return self.create_host_id( conn, host_name, domain, ipv4, ipv6)
+
+    def add_default_ignored_paths( self, conn, host_id):
+        print( f"init_ignored_paths {host_id = }")
+        self._add_ignore_pattern( conn, '/dev/**', host_id)
+        self._add_ignore_pattern( conn, '/home/*/.cache/**', host_id)
+        self._add_ignore_pattern( conn, '/home/*/.mozilla/**', host_id)
+        self._add_ignore_pattern( conn, '/proc/**', host_id)
+        self._add_ignore_pattern( conn, '/run/**', host_id)
+        self._add_ignore_pattern( conn, '/swap', host_id)
+        self._add_ignore_pattern( conn, '/sys/**', host_id)
+        self._add_ignore_pattern( conn, '/tmp/**', host_id)
+        self._add_ignore_pattern( conn, '/usr/include/**', host_id)
+        self._add_ignore_pattern( conn, '/usr/lib/modules/**', host_id)
+        self._add_ignore_pattern( conn, '/usr/share/man/**', host_id)
+        self._add_ignore_pattern( conn, '/var/cache/**', host_id)
+        self._add_ignore_pattern( conn, '/var/lib/**', host_id)
+        self._add_ignore_pattern( conn, '/var/log/**', host_id)
+        self._add_ignore_pattern( conn, '/var/spool/**', host_id)
+
     def create_host_id( self, conn, host_name = None, domain = None, ipv4 = None, ipv6 = None) -> int:
-
-        def init_ignored_paths( conn, host_id):
-            print( f"init_ignored_paths {host_id = }")
-            self.add_ignore_pattern( conn, '/dev/**', host_id)
-            self.add_ignore_pattern( conn, '/home/*/.cache/**', host_id)
-            self.add_ignore_pattern( conn, '/home/*/.mozilla/**', host_id)
-            self.add_ignore_pattern( conn, '/proc/**', host_id)
-            self.add_ignore_pattern( conn, '/run/**', host_id)
-            self.add_ignore_pattern( conn, '/swap', host_id)
-            self.add_ignore_pattern( conn, '/sys/**', host_id)
-            self.add_ignore_pattern( conn, '/tmp/**', host_id)
-            self.add_ignore_pattern( conn, '/usr/include/**', host_id)
-            self.add_ignore_pattern( conn, '/usr/lib/modules/**', host_id)
-            self.add_ignore_pattern( conn, '/usr/share/man/**', host_id)
-            self.add_ignore_pattern( conn, '/var/cache/**', host_id)
-            self.add_ignore_pattern( conn, '/var/lib/**', host_id)
-            self.add_ignore_pattern( conn, '/var/log/**', host_id)
-            self.add_ignore_pattern( conn, '/var/spool/**', host_id)
-
         print( f"create_host_id {host_name = } {domain = } {ipv4 = } {ipv6 = }")
         param_str = ""
         place_str = ""
@@ -336,52 +421,113 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             rows = cur.fetchall()
             cur.close()
             conn.commit()
-            init_ignored_paths( conn, rows[0][0])
+            self.add_default_ignored_paths( conn, rows[0][0])
             return rows[0][0]
         except mariadb.Error as e:
             print(f"Error connecting to MariaDB: (create_host_id) {e}")
             sys.exit(1)
 
-    def hosts( self, conn):
-        cur = conn.cursor()
-        cur.execute( f"SELECT id, name, domain, ipv4, ipv6 FROM `{self.files_db_name}`.`hosts` ;")
-        row = cur.fetchone()
-        while not row is  None:
-            #print(f"ID: {row[0]}, Name: {row[1]}, Subdir: {row[2]}, IPv4: {row[3]}, IPv6: {row[4]}")
-            yield row[0], row[1], row[2], row[3], row[4]
-            row = cur.fetchone()
-        print(f"No more folders in database")
-        # return None
+    def set_host( self, root_in_container, host_name):
+        with self.new_conn() as conn:
+            #print( f"set_host {root_in_container = } {host_name = }")
+            self.root_in_container = os.path.abspath( root_in_container)
+            self.curr_host_id = self.get_host_id( conn, host_name=host_name)
+            #print( f"set_host {self.curr_host_id = }")
+            self.curr_host_ignored_patterns = [row[1] for row in self.all_ignores( conn, self.curr_host_id, all_columns=True)]
+            #print( self.curr_host_ignored_patterns)
+
+    """ IGNORES
+    """
+
+    def fetch_ignored_id( self, conn, path_pattern, host_id):
+        #print( f"ignored_id {path_pattern = } {host_id = }")
+        with conn.cursor() as cur:
+            try:
+                cur.execute( f"SELECT id FROM `{self.files_db_name}`.`ignored_paths` WHERE host_id = ? AND path_pattern = ? ;", ( host_id, path_pattern, ))
+                rows = cur.fetchall()
+                #print( f"ignored_id {len(rows) = } {path_pattern = } {host_id = }")
+                assert len( rows) <= 1
+                if len( rows) == 1:
+                    #print( f"fetch_ignored_id: folder_id {rows[0][0]} ")
+                    return rows[0][0]
+            except mariadb.Error as e:
+                print( f"Error fetch_ignored_id: {e}")
+        return None
+
+    def _clean_up_ignored( self, conn, host_id):
+        for folder_id, folder_path in self.all_folders( conn, host_id, host_path=False):
+            #if self.debug: print( f"create_ignored_pattern: {host_id = } {path_pattern = } {folder_path = }")
+            if self._path_is_ignored( folder_path):
+                print( f"_delete_ignored: {host_id = } deleting {folder_path = }")
+                for file_id, file_name in self.all_files( conn, folder_id):
+                    print( f"_delete_ignored: {host_id = } deleting {folder_path = } {file_name = } {file_id = }")
+                    self.delete_file_id( conn, file_id)
+                self.delete_folder_id( conn, folder_id)
+            for file_id, file_name in self.all_files( conn, folder_id):
+                if self._path_is_ignored( os.path.join( folder_path, file_name)):
+                    print( f"_delete_ignored: {host_id = } deleting {folder_path = }/{file_name = }")
+                    self.delete_file_id( conn, file_id)
+
+    def create_ignored_pattern( self, conn, host_id, path_pattern):
+        if self.debug_entry or self.debug_ignore: print( f"create_ignored_pattern {host_id = } {path_pattern = }")
+        with conn.cursor() as cur:
+            try:
+                cur.execute( f"INSERT INTO `{self.files_db_name}`.`ignored_paths`" \
+                             f" ( host_id, path_pattern, created_at, updated_at )" \
+                             f" VALUES ( ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3) ) " \
+                             f" RETURNING id ;", ( host_id, path_pattern, ))
+                rows = cur.fetchall()
+                assert len( rows) == 1
+                conn.commit()
+                id = rows[0][0]
+            except mariadb.Error as e:
+                print(f"Error connecting to MariaDB: (create_ignored_folder) {e}")
+                sys.exit(1)
+        self._clean_up_ignored( conn, host_id)
+        return id 
+
+    """ public ignore patterns
+    """
+
+    def add_ignore_pattern( self, path_pattern, host_id=None):
+        #if self.debug_entry or self.debug_ignore: print( f"add_ignore_pattern {path_pattern = } {host_id = }")
+        if host_id is None:
+            host_id = self.curr_host_id
+        with self.new_conn() as conn:
+            self._add_ignore_pattern( conn, path_pattern, host_id)
+
+    def _add_ignore_pattern( self, conn, path_pattern, host_id):
+        #if self.debug_entry or self.debug_ignore: print( f"_add_ignore_pattern {path_pattern = } {host_id = }")
+        with self.new_conn() as conn:
+            id = self.fetch_ignored_id( conn, path_pattern, host_id)
+            if id is None:
+                id = self.create_ignored_pattern( conn, host_id, path_pattern)
+        return id
+
+    def remove_ignore_pattern( self, path_pattern, host_id=None):
+        if self.debug_entry or self.debug_ignore: print( f"remove_ignore_pattern {path_pattern = } {host_id = }")
+        if host_id is None:
+            host_id = self.curr_host_id
+        with self.new_conn() as conn:
+            with conn.cursor() as cur:
+                try:
+                    cur.execute( f"DELETE FROM `{self.files_db_name}`.`ignored_paths` WHERE host_id = ? AND path_pattern = ? RETURNING id ;",
+                                  ( host_id, path_pattern, ))
+                    rows = cur.fetchall()
+                    if self.debug_ignore: print( f"remove_ignore_pattern {len(rows) = } {path_pattern = } {host_id = }")
+                    assert len( rows) <= 1
+                    if len( rows) == 0:
+                        print( f"remove_ignore_pattern: no match {len(rows) = } {path_pattern = } {host_id = }")
+                        return None
+                    if self.debug_ignore: print( f"remove_ignore_pattern: id {rows[0][0]} ")
+                    conn.commit()
+                except mariadb.Error as e:
+                    print( f"Error connecting to MariaDB Privileges: {e}")
+                    sys.exit(1)
+        return rows[0][0]
 
     """ folders
     """
-
-    def list_folders( self, conn, host_id=None, all_or_deleted=None):
-        if host_id == "*":
-            print( f"No host_id")
-            for host in self.hosts( conn):
-                print( f"{host = }")
-                for folder in self.folders( conn, host[0], host_path=False, all_or_deleted=all_or_deleted):
-                    print( f"{folder = }")
-        else:
-            if host_id is None:
-                host_id = self.curr_host_id
-            #print( f"list_folders {host_id = }")
-            for folder in self.folders( conn, host_id, host_path=False, all_or_deleted=all_or_deleted):
-                print( f"{folder = }")
-
-    def count_folders( self, conn, host_id=None, all_or_deleted=None):
-        if host_id == "*":
-            print( f"No host_id")
-            for host in self.hosts( conn):
-                folders = self.folders( conn, host[0], all_or_deleted=all_or_deleted)
-                print( f"{host = } {len(list(folders)) = }")
-        else:
-            if host_id is None:
-                host_id = self.curr_host_id
-            #print( f"count_folders {host_id = }")
-            folder = self.folders( conn, host_id, all_or_deleted=all_or_deleted)
-            print( f"{len(list(folders)) = }")
 
     def _path_is_ignored( self, path):
         #print( f"path_is_ignored: {path = }")
@@ -446,26 +592,6 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             print( f"Error connecting to MariaDB: (create_folder_id) {e}")
             sys.exit(1)
 
-    def folders( self, conn, host_id, host_path=True, all_or_deleted=None):
-        cur = conn.cursor()
-        filter_str = ""
-        if all_or_deleted is None:
-            filter_str = "AND deleted_at IS NULL"
-        else:
-            if not all_or_deleted:
-                filter_str = "AND deleted_at IS NOT NULL"
-        cur.execute( f"SELECT id, path FROM `{self.files_db_name}`.`folders`"
-                     f" WHERE host_id = ? {filter_str} ;", ( host_id, ))
-        row = cur.fetchone()
-        while not row is None:
-            #print(f"ID: {row[0]}, Path: {row[1]}")
-            if host_path:
-                yield row[0], os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( row[1], '/')))
-            else:
-                yield row[0], row[1]
-            row = cur.fetchone()
-        #print( f"No more folders in database")
-
     def delete_folder_id( self, conn, folder_id):
         print( f"delete_folder_id: {folder_id = }")
         with conn.cursor() as cur:
@@ -483,37 +609,6 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                 print( f"Error connecting to MariaDB: (delete_folder_id) {e}")
                 sys.exit(1)
         conn.commit()
-
-    def count_files( self, conn, host_id=None, all_or_deleted=None):
-        if host_id == "*":
-            print( f"No host_id")
-            for host in self.hosts( conn):
-                file_rows = self.files( conn, all_columns=True, all_or_deleted=all_or_deleted)
-                print( f"{host = } {len(list(file_rows))}")
-        else:
-            if host_id is None:
-                host_id = self.curr_host_id
-            #print( f"count_files {host_id = }")
-            for folder_id, folder_path in self.folders( conn, host_id, host_path=False, all_or_deleted=True):
-                file_rows = self.files( conn, folder_id, all_columns=True, all_or_deleted=all_or_deleted)
-                print( f"{len(list(file_rows))}")
-
-    def list_files( self, conn, host_id=None, all_or_deleted=None):
-        if host_id == "*":
-            print( f"No host_id")
-            for host in self.hosts( conn):
-                print( f"{host = }")
-                for file_row in self.files( conn, all_columns=True, all_or_deleted=all_or_deleted):
-                    print( f"ID: {file_row[0]:7d} Length: {file_row[2]:9d}  CTime {file_row[5]}  MTime {file_row[6]}"
-                           f"#{file_row[7]} Del {file_row[10] if file_row[10] is not None else False}  {file_row[1]}")
-        else:
-            if host_id is None:
-                host_id = self.curr_host_id
-            #print( f"list_files {host_id = }")
-            for folder_id, folder_path in self.folders( conn, host_id, host_path=False, all_or_deleted=True):
-                for file_row in self.files( conn, folder_id, all_columns=True, all_or_deleted=all_or_deleted):
-                    print( f"ID: {file_row[0]:7d} Length: {file_row[2]:9d}  CTime {file_row[5]}  MTime {file_row[6]}"
-                           f"#{file_row[7]} Del {file_row[10] if file_row[10] is not None else False}  {file_row[1]}")
 
     """ public files
     """
@@ -582,40 +677,6 @@ class PhotoviewFilesServer( PhotoviewDbServer):
         except mariadb.Error as e:
             print( f"Error connecting to MariaDB: (create_file_id) {e}")
             sys.exit(1)
-
-    def files( self, conn, folder_id=None, all_columns=False, all_or_deleted=None):
-        #print( f"files {folder_id = } {all_columns = } {all_or_deleted = }")
-        if folder_id is None:
-            where_str = ""
-            param_lst = ( )
-            if all_or_deleted is None:
-                where_str = "WHERE deleted_at IS NULL"
-            else:
-                if not all_or_deleted:
-                    where_str = "WHERE deleted_at IS NOT NULL"
-        else:
-            where_str = "WHERE folder_id = ? "
-            param_lst = ( folder_id, )
-            if all_or_deleted is None:
-                where_str += "AND deleted_at IS NULL"
-            else:
-                if not all_or_deleted:
-                    where_str += "AND deleted_at IS NOT NULL"
-        columns = "id, file_name"
-        if all_columns:
-            columns += ", length, ctime_ns, mtime_ns, ctime, mtime, file_hash, created_at, updated_at, deleted_at"
-        stmt = f"SELECT {columns}" \
-               f" FROM `{self.files_db_name}`.`files`" \
-               f" {where_str} ;"
-        #print( stmt, param_lst)
-        with conn.cursor() as cur:
-            cur.execute( stmt, param_lst)
-            row = cur.fetchone()
-            while row is not None:
-                #print(f"ID: {row[0]}, File: {row[1]}")
-                yield row
-                row = cur.fetchone()
-        #print( f"No more files in database")
 
     def delete_file_id( self, conn, file_id):
         print( f"delete_file_id: {file_id = }")

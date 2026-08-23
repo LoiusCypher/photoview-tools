@@ -63,34 +63,48 @@ host_fs='/host_fs'
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument( "--version", "-V", action="store_true", help="show version")
-    parser.add_argument( "--host-name", required=True, help="Host name")
-    parser.add_argument( "--host-ipv4", required=True, help="Host IPV4 address")
+    parser.add_argument( "--recreate-database", "-R", action="store_true", help="Recreate database",)
+    parser.add_argument( "--debug", "-D", action="store_true", help="enable debug output")
+    parser.add_argument( "host_name", help="Host name")
+    # sub commands
     subparsers = parser.add_subparsers(dest='subcommand')
     subparsers.required = True 
     parser_ignore = subparsers.add_parser('ignore')
-    parser_ignore.add_argument( "pattern", help="Path pattern to ignore",)
-    #group = parser_ignore.add_mutually_exclusive_group()
-    #group.add_argument( "--remove", action="store_true", help="Remove pattern from ignore list in db",)
-    parser_ignore.add_argument( "--remove", action="store_true", help="Remove pattern from ignore list in db",)
-    parser_ignore.add_argument( "--list", action="store_true", help="List ignore pattern",)
     parser_list = subparsers.add_parser('list')
+    parser_count = subparsers.add_parser('count')
+    parser_check = subparsers.add_parser('check')
+    parser_hosts = subparsers.add_parser('hosts')
+    parser_init = subparsers.add_parser('init')
+    # ignore
+    parser_ignore.add_argument( "pattern", help="Path pattern to ignore",)
+    parser_ignore.add_argument( "--remove", action="store_true", help="Remove pattern from ignore list in db",)
+    # list
     group = parser_list.add_mutually_exclusive_group()
+    group.add_argument( "--hosts", action="store_true", help="Only list hosts in db",)
+    group.add_argument( "--ignores", action="store_true", help="Only list ignore patterns in db",)
     group.add_argument( "--folders", action="store_true", help="Only list folders in db",)
     group.add_argument( "--files", action="store_true", help="Only list files in db",)
-    group.add_argument( "--ignores", action="store_true", help="Only ignore patterns in db",)
     parser_list.add_argument( "--deleted", action="store_false", help="List deleted items",)
-    parser_count = subparsers.add_parser('count')
-    parser_count.add_argument( "--folders", action="store_true", help="Only count folders in db",)
-    parser_count.add_argument( "--files", action="store_true", help="Only count files in db",)
+    # count
+    group = parser_count.add_mutually_exclusive_group()
+    group.add_argument( "--hosts", action="store_true", help="Only list hosts in db",)
+    group.add_argument( "--ignores", action="store_true", help="Only list ignore patterns in db",)
+    group.add_argument( "--folders", action="store_true", help="Only list folders in db",)
+    group.add_argument( "--files", action="store_true", help="Only list files in db",)
     parser_count.add_argument( "--deleted", action="store_false", help="Count deleted items",)
-    parser_check = subparsers.add_parser('check')
+    # check
     parser_check.add_argument( "--removed", action="store_true", help="Check for removed items",)
     parser_check.add_argument( "--new-or-changed", action="store_true", help="Check for new or changed items",)
     parser_check.add_argument( "--subtree", "-S", help="Scan partial subtree",)
     parser_check.add_argument( "--sha", action="store_true", help="Compute SHA3 checksums",)
-    parser.add_argument( "--debug", "-D", action="store_true", help="enable debug output")
-    parser.add_argument( "--recreate-database", "-R", action="store_true", help="Recreate database",)
+    # hosts
+    #parser_hosts.add_argument( "--list-all", action="store_true", help="List all hosts",)
+    #parser_hosts.add_argument( "--update-ignores", action="store_true", help="List all hosts",)
+    #parser_hosts.add_argument( "--host-ipv4", help="Host IPV4 address")
+
     args = parser.parse_args()
+
+    print( f"{args = }")
 
     try:
         subtree = os.path.abspath( os.path.join( host_fs, args.subtree.strip('/')))
@@ -105,33 +119,38 @@ def main() -> int:
                                       files_db_name=files_db_name,
                                       recreate=args.recreate_database)
 
-    host_id = db_server.set_host( host_fs, host_name=args.host_name, ipv4=args.host_ipv4)
-
-    print( f"{args = }")
+    #host_id = db_server.set_host( host_fs, host_name=args.host_name, ipv4=args.host_ipv4)
+    host_id = db_server.set_host( host_fs, args.host_name)
 
     if args.subcommand == "ignore":
-        if args.list:
-            db_server.list_ignore_patterns()
         if args.remove:
             db_server.remove_ignore_pattern( args.pattern)
         else:
             db_server.add_ignore_pattern( args.pattern)
 
-    if args.subcommand == "count":
-        conn = db_server.new_conn()
-        if args.folders or not args.files:
-            db_server.count_folders( conn, args.deleted)
-        if not args.folders or args.files:
-            db_server.count_files( conn, args.deleted)
-
     if args.subcommand == "list":
-        conn = db_server.new_conn()
-        if args.folders or not (args.files or args.ignores):
-            db_server.list_folders( conn, args.deleted)
-        if args.files or not (args.folders or args.ignores):
-            db_server.list_files( conn, args.deleted)
-        if not (args.folders or args.files) or args.ignores:
-            db_server.list_ignore_patterns( args.deleted)
+        if args.hosts or not (args.ignores or args.folders or args.files):
+            db_server.list_hosts( all_or_deleted=args.deleted)
+        if args.ignores or not (args.hosts or args.folders or args.files):
+            db_server.list_ignore_patterns( all_or_deleted=args.deleted)
+        if args.folders or not (args.hosts or args.ignores or args.files):
+            db_server.list_folders( all_or_deleted=args.deleted)
+        if args.files or not (args.hosts or args.ignores or args.folders):
+            db_server.list_files( all_or_deleted=args.deleted)
+
+    if args.subcommand == "host":
+        #if args.list_all:
+            db_server.list_hosts( host_id='*')
+
+    if args.subcommand == "count":
+        if args.hosts or not (args.ignores or args.folders or args.files):
+            db_server.count_hosts( args.deleted)
+        if args.ignores or not (args.hosts or args.folders or args.files):
+            db_server.count_ignores( args.deleted)
+        if args.folders or not (args.hosts or args.ignores or args.files):
+            db_server.count_folders( args.deleted)
+        if args.files or not (args.hosts or args.ignores or args.folders):
+            db_server.count_files( args.deleted)
 
     if args.subcommand == "check":
         if args.removed or not args.new_or_changed:
