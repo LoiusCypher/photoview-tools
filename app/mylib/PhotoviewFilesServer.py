@@ -298,6 +298,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             self.get_ignored_id( conn, '/sys/**', host_id)
             self.get_ignored_id( conn, '/tmp/**', host_id)
             self.get_ignored_id( conn, '/usr/include/**', host_id)
+            self.get_ignored_id( conn, '/usr/lib/modules/**', host_id)
             self.get_ignored_id( conn, '/usr/share/man/**', host_id)
             self.get_ignored_id( conn, '/var/cache/**', host_id)
             self.get_ignored_id( conn, '/var/lib/**', host_id)
