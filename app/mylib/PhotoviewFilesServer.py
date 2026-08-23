@@ -174,7 +174,9 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                     yield row[0]
                 row = cur.fetchone()
 
-    def all_folders( self, conn, host_id, host_path=True, all_or_deleted=None):
+    def all_folders( self, conn, host_id=None, host_path=True, all_or_deleted=None):
+        if host_id is None:
+            host_id = self.curr_host_id
         columns = "id, path"
         #if all_columns:
             #columns += ", path_hash, host_id, parent_id, created_at, updated_at, deleted_at"
@@ -337,9 +339,11 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                 if host_id is None:
                     host_id = self.curr_host_id
                 #print( f"count_files {host_id = }")
+                file_cnt = 0
                 for folder_id, _ in self.all_folders( conn, host_id, all_or_deleted=True):
                     file_rows = self.all_files( conn, folder_id, all_or_deleted=all_or_deleted)
-                    print( f"{len(list(file_rows))}")
+                    file_cnt += len( list( file_rows))
+                print( f"{file_cnt}")
 
     """ PUBLIC hosts =======================================================
     """
@@ -368,7 +372,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
         assert len(rows) <= 1
         if len(rows) == 1:
             #print(f"get_host_id: host_id {rows[0]} ")
-            return rows[0]
+            return rows[0][0]
         return self.create_host_id( conn, host_name, domain, ipv4, ipv6)
 
     def add_default_ignored_paths( self, conn, host_id):

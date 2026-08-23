@@ -12,37 +12,36 @@ photo_db_name = "photoview"
 #import os
 #from os.path import join, getsize
 
-def check_for_removed_items( db, host_id, subtree_to_check=None):
-    #print( f"{host_id = } {root_in_container = }")
+def check_for_removed_items( db, container_subtree_to_check):
+    #print( f"{root_in_container = }")
     conn = db.new_conn()
     assert conn is not None
-    if subtree_to_check is None:
-        subtree_to_check = db.root_in_container
-    for folder_id, folder_host_path in db.all_folders( conn, host_id):
-        if not folder_host_path.startswith( subtree_to_check):
-            print( f"Skip {folder_host_path = } {folder_id = } not part of {subtree_to_check = }")
+    if container_subtree_to_check is None:
+        container_subtree_to_check = db.root_in_container
+    for folder_id, folder_container_path in db.all_folders( conn):
+        if not folder_container_path.startswith( container_subtree_to_check):
+            print( f"Skip {folder_container_path = } {folder_id = } not part of {container_subtree_to_check = }")
         else:
-            #print( f"{db.root_in_container = } {folder_host_path = } {folder_id = }")
-            #print( f"{os.path.join( db.root_in_container, folder_host_path) = }")
-            if not os.path.isdir( os.path.join( db.root_in_container, folder_host_path)):
-                print( f"delete_folder {folder_id} {folder_host_path}")
+            #print( f"{db.root_in_container = } {folder_container_path = } {folder_id = }")
+            if not os.path.isdir( folder_container_path):
+                print( f"delete_folder {folder_id} {folder_container_path}")
                 db.delete_folder_id( conn, folder_id)
             else:
-                for file_id, file_name in db.files( conn, folder_id=folder_id):
+                for file_id, file_name in db.all_files( conn, folder_id=folder_id):
                     #print( f"{root_in_container = } {folder_path = } {file_name = }")
                     #print( f"{os.path.join( folder_path, file_name) = }")
-                    if not os.path.isfile( os.path.join( folder_host_path, file_name)):
-                        print( f"delete_file {file_id} {folder_host_path} {file_name}")
+                    if not os.path.isfile( os.path.join( folder_container_path, file_name)):
+                        print( f"delete_file {file_id} {folder_container_path}//{file_name}")
                         db.delete_file_id( conn, file_id)
     conn.close()
 
-def check_for_new_or_updated_items( db, host_id, subtree_to_update=None, sha=False):
-    #print( f"{host_id = } {subtree_to_update = }")
+def check_for_new_or_updated_items( db, container_subtree_to_update, sha):
+    #print( f"{container_subtree_to_update = }")
     conn = db.new_conn()
     assert conn is not None
-    if subtree_to_update is None:
-        subtree_to_update = db.root_in_container
-    for curr, dirs, files in os.walk( subtree_to_update):
+    if container_subtree_to_update is None:
+        container_subtree_to_update = db.root_in_container
+    for curr, dirs, files in os.walk( container_subtree_to_update):
         folder_id, host_folder = db.get_folder_id( conn, curr)
         #print( f"{curr = } {folder_id = } {files = }")
         if folder_id is not None:
@@ -107,11 +106,11 @@ def main() -> int:
     print( f"{args = }")
 
     try:
-        subtree = os.path.abspath( os.path.join( host_fs, args.subtree.strip('/')))
-        assert os.path.isdir( subtree)
+        container_subtree = os.path.abspath( os.path.join( host_fs, args.subtree.strip('/')))
+        assert os.path.isdir( container_subtree)
     except:
-        subtree = None
-    print(f"{subtree = }")
+        container_subtree = None
+    print(f"{container_subtree = }")
 
     db_server = PhotoviewFilesServer( root="root", root_pwd="superphotosecret",
                                       user="photoview", user_pwd="photosecret",
@@ -119,8 +118,8 @@ def main() -> int:
                                       files_db_name=files_db_name,
                                       recreate=args.recreate_database)
 
-    #host_id = db_server.set_host( host_fs, host_name=args.host_name, ipv4=args.host_ipv4)
-    host_id = db_server.set_host( host_fs, args.host_name)
+    #db_server.set_host( host_fs, host_name=args.host_name, ipv4=args.host_ipv4)
+    db_server.set_host( host_fs, args.host_name)
 
     if args.subcommand == "ignore":
         if args.remove:
@@ -155,16 +154,16 @@ def main() -> int:
     if args.subcommand == "check":
         if args.removed or not args.new_or_changed:
             print( "check_recorded_tree")
-            check_for_removed_items( db_server, host_fs, subtree)
+            check_for_removed_items( db_server, container_subtree)
         if not args.removed or args.new_or_changed:
             print( "update_recorded_tree")
-            check_for_new_or_updated_items( db_server, host_fs, subtree_to_update=subtree, sha=args.sha)
+            check_for_new_or_updated_items( db_server, container_subtree, args.sha)
 
     return 0
 
     print( f"Only Deleted")
-    db_server.list_folders( conn, host_id, all_or_deleted=False)
-    db_server.list_files( conn, host_id=host_id, all_or_deleted=False)
+    db_server.list_folders( conn, all_or_deleted=False)
+    db_server.list_files( conn, all_or_deleted=False)
 
     return -2
 
