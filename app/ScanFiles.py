@@ -23,9 +23,9 @@ def check_for_removed_items( db, container_subtree_to_check):
                 if os.path.isdir( folder_container_path):
                     for file_id, file_name in db.all_files( conn, folder_id=folder_id):
                         #print( f"{root_in_container = } {folder_path = } {file_name = }")
-                        #print( f"{os.path.join( folder_path, file_name) = }")
+                        #print( f"{os.path.join( folder_container_path, file_name) = }")
                         if not os.path.isfile( os.path.join( folder_container_path, file_name)):
-                            print( f"delete_file {file_id} {folder_container_path}//{file_name}")
+                            print( f"NOT isfile {file_id} {os.path.join( folder_container_path, file_name) = }")
                             db.delete_file_id( conn, file_id)
                 else:
                     print( f"delete_folder not isdir {folder_id} {folder_container_path}")
