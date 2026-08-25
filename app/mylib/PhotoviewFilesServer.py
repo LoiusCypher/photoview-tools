@@ -188,7 +188,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                 filter_str = "AND deleted_at IS NOT NULL"
         with conn.cursor() as cur:
             cur.execute( f"SELECT {columns} FROM `{self.files_db_name}`.`folders`"
-                         f" WHERE host_id = ? {filter_str} ;", ( host_id, ))
+                         f" WHERE host_id = ? {filter_str} ORDER BY path;", ( host_id, ))
             row = cur.fetchone()
             while not row is None:
                 #print(f"ID: {row[0]}, Path: {row[1]}")
@@ -224,7 +224,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             columns += ", length, ctime_ns, mtime_ns, ctime, mtime, file_hash, created_at, updated_at, deleted_at"
         stmt = f"SELECT {columns}" \
                f" FROM `{self.files_db_name}`.`files`" \
-               f" {where_str} ;"
+               f" {where_str} ORDER BY file_name ;"
         #print( stmt, param_lst)
         with conn.cursor() as cur:
             cur.execute( stmt, param_lst)
@@ -382,20 +382,25 @@ class PhotoviewFilesServer( PhotoviewDbServer):
         #print(f"update_default_ignored_paths: {host_id = } ")
         if host_id is None:
             host_id = self.curr_host_id
-        assert host_id == self.curr_host_id
+        assert self.curr_host_id is None or host_id == self.curr_host_id
         patterns = {
             'default':
-                 [ '/etc/tmpfiles.d/**', '/etc/modprobe.d/**', '/etc/fonts/**', '/etc/network/**', '/etc/systemd/**', '/etc/X11/**', '/dev/**',
-                   '/home/*/.cache/**', '/home/*/.docker/**', '/home/*/.mozilla/**', '/proc/**', '/run/**', '/swap', '/sys/**',
+                 [ '/boot/**',
+                   '/etc/tmpfiles.d/**', '/etc/modprobe.d/**', '/etc/fonts/**', '/etc/network/**', '/etc/systemd/**', '/etc/X11/**', '/dev/**',
+                   '/etc/kernel/**', '/etc/xdg/**', '/etc/libblockdev/**', '/etc/dpkg/**', '/etc/sgml/**', '/etc/ssh/**', '/etc/apt/**',
+                   '/home/*/.cache/**', '/home/*/.docker/**', '/home/*/.mozilla/**', '/opt/containerd/**', '/proc/**', '/run/**', '/swap', '/sys/**',
                    '/tmp/**', '/usr/include/**', '/usr/lib/modules/**', '/usr/share/man/**', '/var/cache/**',
                    '/var/lib/**', '/var/log/**', '/var/spool/**', '/var/tmp/**', ],
             'debian-1':
                  [ '/home2/*/.cache/**', '/home2/*/.docker/**', '/home2/*/.mozilla/**',
+                   '/home2/helmut/docker/photoview/.git/**',
+                   '/home2/helmut/docker/photoview/ui/node_modules/**',
+                   '/home2/helmut/docker/photoview/_container_dir/**',
                    '/usr/lib/aarch64-linux-gnu/**', '/usr/lib/locale/**', '/etc/cups/**',
                    '/home/helmut/docker/photoview/_container_dir/**',
                    '/home/helmut/docker/photoview/_container_dir_1/**', ],
             'debian-3':
-                 [ '/dev/**', ],
+                 [ '/home/helmut/docker/photoview/photoview/**', ],
             'ssstore':
                  [ '/dev/**', ],
         }
@@ -411,7 +416,7 @@ class PhotoviewFilesServer( PhotoviewDbServer):
         return created
 
     def create_host_id( self, conn, host_name = None, domain = None, ipv4 = None, ipv6 = None) -> int:
-        print( f"create_host_id {host_name = } {domain = } {ipv4 = } {ipv6 = }")
+        #print( f"create_host_id {host_name = } {domain = } {ipv4 = } {ipv6 = }")
         param_str = ""
         place_str = ""
         sel_list = []
