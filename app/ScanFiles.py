@@ -44,9 +44,13 @@ def check_for_new_or_updated_items( db, container_subtree_to_update, sha):
             if folder_id is not None:
                 for file_name in files:
                     file_path = os.path.join( curr, file_name)
-                    file_stat = os.lstat( file_path)
-                    file_id = db.get_file_id( conn, folder_id, file_name, file_stat, host_folder, sha)
-                    #print( curr, file_name, file_id)
+                    if os.path.isfile( file_path):
+                        file_stat = os.lstat( file_path)
+                        file_id = db.get_file_id( conn, folder_id, file_name, file_stat, host_folder, sha)
+                        #print( curr, file_name, file_id)
+                    else:
+                        if os.path.islink( file_path):
+                            print( "IS NOT file NOR link", file_paath)
                 #print( f"{curr = } {dirs = }")
                 for sub_dir in dirs:
                     folder_path = os.path.join( curr, sub_dir)
@@ -69,7 +73,7 @@ def main() -> int:
     parser_count = subparsers.add_parser('count')
     parser_check = subparsers.add_parser('check')
     parser_hosts = subparsers.add_parser('hosts')
-    #parser_init = subparsers.add_parser('init')
+    parser_init = subparsers.add_parser('clear')
     # ignore
     parser_ignore.add_argument( "pattern", nargs='?', help="Path pattern to ignore",)
     parser_ignore.add_argument( "--remove", action="store_true", help="Remove pattern from ignore list in db",)
@@ -119,6 +123,11 @@ def main() -> int:
     #db_server.set_host( host_fs, host_name=args.host_name, ipv4=args.host_ipv4)
     db_server.set_host( host_fs, args.host_name)
 
+    #db_server.test_path_is_ignored( "/var/lib/docker/volumes/6eee01d3d25aa65deed671e75bd2b42bf3ffd68eb3c6f8c32439852c24d1a5bc/_data/temp")
+
+    if args.subcommand == "clear":
+        print( f"Deleted:", db_server.clear_folders_and_files())
+
     if args.subcommand == "ignore":
         if args.update_defaults:
             with db_server.new_conn() as conn:
@@ -127,7 +136,10 @@ def main() -> int:
         else:
             if args.remove:
                 ids = db_server.remove_ignore_pattern( args.pattern)
-                print( f"{len(ids)} entries removed")
+                if ids is None:
+                    print( f"No entries removed")
+                else:
+                    print( f"{ids} entry removed")
             else:
                 added_cnt = db_server.add_ignore_pattern( args.pattern)
                 print( f"{added_cnt} entries added")

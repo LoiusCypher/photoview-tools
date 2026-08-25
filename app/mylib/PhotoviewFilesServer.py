@@ -559,6 +559,9 @@ class PhotoviewFilesServer( PhotoviewDbServer):
     """ folders
     """
 
+    def test_path_is_ignored( self, path):
+        print( self._path_is_ignored( path))
+
     def _path_is_ignored( self, path):
         #print( f"path_is_ignored: {path = }")
         for patt in self.curr_host_ignored_patterns:
@@ -724,6 +727,22 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                 print( f"Error connecting to MariaDB: (delete_file_id) {e}")
                 sys.exit(1)
         conn.commit()
+
+    def clear_folders_and_files( self):
+        #print( f"delete_file_id: {file_id = }")
+        with self.new_conn() as conn:
+            with conn.cursor() as cur:
+                try:
+                    cur.execute( f"DELETE FROM `{self.files_db_name}`.`folders`" \
+                                 f" WHERE host_id = ?" \
+                                 f" ;", ( self.curr_host_id, ))
+                    rows = cur.rowcount
+                    #print( f"{rows = }")
+                except mariadb.Error as e:
+                    print( f"Error connecting to MariaDB: (delete_all) {e}")
+                    sys.exit(1)
+            conn.commit()
+        return rows
 
     def get_next_filename( self, start_id, conn):
         cur = conn.cursor()
