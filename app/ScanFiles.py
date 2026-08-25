@@ -88,6 +88,7 @@ def main() -> int:
     group.add_argument( "--folders", action="store_true", help="Only list folders in db",)
     group.add_argument( "--files", action="store_true", help="Only list files in db",)
     parser_count.add_argument( "--deleted", action="store_true", help="Count deleted items",)
+    parser_count.add_argument( "--every-host", action="store_true", help="Count items for every hosts",)
     # check
     parser_check.add_argument( "--removed", action="store_true", help="Check for removed items",)
     parser_check.add_argument( "--new-or-changed", action="store_true", help="Check for new or changed items",)
@@ -121,12 +122,15 @@ def main() -> int:
     if args.subcommand == "ignore":
         if args.update_defaults:
             with db_server.new_conn() as conn:
-                db_server.update_default_ignored_paths( conn, None)
+                added_cnt = db_server.update_default_ignored_paths( conn, None)
+                print( f"{added_cnt} entries added")
         else:
             if args.remove:
-                db_server.remove_ignore_pattern( args.pattern)
+                ids = db_server.remove_ignore_pattern( args.pattern)
+                print( f"{len(ids)} entries removed")
             else:
-                db_server.add_ignore_pattern( args.pattern)
+                added_cnt = db_server.add_ignore_pattern( args.pattern)
+                print( f"{added_cnt} entries added")
 
     if args.subcommand == "list":
         _del = None
@@ -146,17 +150,24 @@ def main() -> int:
             db_server.list_hosts( host_id='*')
 
     if args.subcommand == "count":
+        _hosts = None
+        if args.every_host:
+            _hosts = "*"
         _del = None
         if args.deleted:
             _del = False
         if args.hosts or not (args.ignores or args.folders or args.files):
-            db_server.count_hosts( all_or_deleted=_del)
+            host_cnt = db_server.count_hosts( all_or_deleted=_del)
+            print( f"Hosts: {host_cnt}")
         if args.ignores or not (args.hosts or args.folders or args.files):
-            db_server.count_ignores( all_or_deleted=_del)
+            for host_id, ignore_cnt in db_server.count_ignores( host_id=_hosts, all_or_deleted=_del):
+                print( f"Ignores {host_id}: {ignore_cnt}")
         if args.folders or not (args.hosts or args.ignores or args.files):
-            db_server.count_folders( all_or_deleted=_del)
+            for host_id, folder_cnt in db_server.count_folders( host_id=_hosts, all_or_deleted=_del):
+                print( f"Folders {host_id}:: {folder_cnt}")
         if args.files or not (args.hosts or args.ignores or args.folders):
-            db_server.count_files( all_or_deleted=_del)
+            for host_id, file_cnt in db_server.count_files( host_id=_hosts, all_or_deleted=_del):
+                print( f"Files {host_id}:: {file_cnt}")
 
     if args.subcommand == "check":
         if args.removed or not args.new_or_changed:
