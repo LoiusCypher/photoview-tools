@@ -50,7 +50,7 @@ def check_for_new_or_updated_items( db, container_subtree_to_update, sha):
                         #print( curr, file_name, file_id)
                     else:
                         if os.path.islink( file_path):
-                            print( "IS NOT file NOR link", file_paath)
+                            print( "IS NOT file NOR link", file_path)
                 #print( f"{curr = } {dirs = }")
                 for sub_dir in dirs:
                     folder_path = os.path.join( curr, sub_dir)
