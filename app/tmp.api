@@ -1,0 +1,78 @@
+openapi: 3.0.4
+info:
+  title: Sample API
+  description: Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML.
+  version: 0.1.9
+
+servers:
+  - url: http://192.168.2.227/
+    description: Current development server
+
+paths:
+  /v1/servers:
+    summary: Represents the servers / hosts where files and folders can be found
+    description: Optional extended description in CommonMark or HTML.
+    get:
+      summary: Returns a list of servers.
+      description: Optional extended description in CommonMark or HTML.
+      responses:
+        "200": # status code
+          description: A JSON array of server attributes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Server"
+    put:
+    post:
+    delete:
+  /v1/servers/{id}:
+    summary: Represents a server
+    description: >
+      This resource represents an individual server on the network.
+      Each server is identified by a numeric `id`.
+  /v1/ignores:
+  /v1/ignores/{id}:
+  /v1/folders:
+  /v1/folders/{id}:
+  /v1/servers/{id}/ignores:
+  /v1/servers/{id}/ignores/{id}:
+  /v1/servers/{id}/folders:
+  /v1/servers/{id}/folders/{id}:
+  /v1/servers/{id}/folders/{id}/files:
+  /v1/servers/{id}/folders/{id}/files/{id}:d
+  /v1/folders/{id}/files:
+  /v1/folders/{id}/files/{id}:
+  /v1/files:
+  /v1/files/{id}:
+
+components:
+  schemas:
+    Host:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        created_at:
+        updated_at:
+        name:
+          type: string
+        domain:
+          type: string
+        ipv4:
+        ipv6:
+      required:
+        - id
+        - name
+    Ignore:
+      type: object
+      properties:
+    Folder:
+      type: object
+      properties:
+    File:
+      type: object
+      properties:
+
