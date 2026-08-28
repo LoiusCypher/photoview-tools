@@ -9,8 +9,85 @@ files_db_name = "files_collector"
 tools_db_name = "object_detector"
 photo_db_name = "photoview"
 
-#import os
-#from os.path import join, getsize
+""" *************************************************************************************************************************
+usage: ScanFiles.py [-h] [--version] [--recreate-database] [--debug] host_name {ignore,list,count,check,hosts,clear} ...
+
+positional arguments:
+  host_name             Host name
+  {ignore,list,count,check,hosts,clear}
+
+options:
+  -h, --help            show this help message and exit
+  --version, -V         show version
+  --recreate-database, -R
+                        Recreate database
+  --debug, -D           enable debug output
+
+usage: ScanFiles.py host_name ignore [-h] [--remove] [--update-defaults] [pattern]
+
+positional arguments:
+  pattern            Path pattern to ignore
+
+options:
+  -h, --help         show this help message and exit
+  --remove           Remove pattern from ignore list in db
+  --update-defaults  Update patterns from defaults
+
+usage: ScanFiles.py host_name list [-h] [--hosts | --ignores | --folders | --files] [--deleted]
+
+options:
+  -h, --help  show this help message and exit
+  --hosts     Only list hosts in db
+  --ignores   Only list ignore patterns in db
+  --folders   Only list folders in db
+  --files     Only list files in db
+  --deleted   List deleted items
+
+usage: ScanFiles.py host_name count [-h]
+                                    [--hosts | --ignores | --folders | --files]
+                                    [--deleted] [--every-host]
+
+options:
+  -h, --help    show this help message and exit
+  --hosts       Only list hosts in db
+  --ignores     Only list ignore patterns in db
+  --folders     Only list folders in db
+  --files       Only list files in db
+  --deleted     Count deleted items
+  --every-host  Count items for every hosts
+
+sage: ScanFiles.py host_name check [-h] [--removed] [--new-or-changed] [--subtree SUBTREE] [--sha]
+
+options:
+  -h, --help            show this help message and exit
+  --removed             Check for removed items
+  --new-or-changed      Check for new or changed items
+  --subtree SUBTREE, -S SUBTREE
+                        Scan partial subtree
+  --sha                 Compute SHA3 checksums
+
+usage: ScanFiles.py host_name hosts [-h]
+
+options:
+  -h, --help  show this help message and exit
+
+sage: ScanFiles.py host_name clear [-h]
+
+options:
+  -h, --help  show this help message and exit
+
+************************************************************************************************************************* """
+
+from fastapi import FastAPI
+
+app = None
+app = FastAPI()
+
+@app.get("/v1/hosts")
+async def hosts():
+    return "Hello"
+
+
 
 def check_for_removed_items( db, container_subtree_to_check):
     #print( f"{root_in_container = }")
@@ -49,7 +126,7 @@ def check_for_new_or_updated_items( db, container_subtree_to_update, sha):
                         file_id = db.get_file_id( conn, folder_id, file_name, file_stat, host_folder, sha)
                         #print( curr, file_name, file_id)
                     else:
-                        if os.path.islink( file_path):
+                        if not os.path.islink( file_path):
                             print( "IS NOT file NOR link", file_path)
                 #print( f"{curr = } {dirs = }")
                 for sub_dir in dirs:
@@ -64,6 +141,7 @@ def main() -> int:
     parser.add_argument( "--version", "-V", action="store_true", help="show version")
     parser.add_argument( "--recreate-database", "-R", action="store_true", help="Recreate database",)
     parser.add_argument( "--debug", "-D", action="store_true", help="enable debug output")
+    parser.add_argument( "--fast-api", "-F", action="store_true", help="Start FastAPI instead of CLI")
     parser.add_argument( "host_name", help="Host name")
     # sub commands
     subparsers = parser.add_subparsers(dest='subcommand')
@@ -87,7 +165,7 @@ def main() -> int:
     parser_list.add_argument( "--deleted", action="store_true", help="List deleted items",)
     # count
     group = parser_count.add_mutually_exclusive_group()
-    group.add_argument( "--hosts", action="store_true", help="Only list hosts in db",)
+    #group.add_argument( "--hosts", action="store_true", help="Only list hosts in db",)
     group.add_argument( "--ignores", action="store_true", help="Only list ignore patterns in db",)
     group.add_argument( "--folders", action="store_true", help="Only list folders in db",)
     group.add_argument( "--files", action="store_true", help="Only list files in db",)
@@ -120,10 +198,10 @@ def main() -> int:
                                       files_db_name=files_db_name,
                                       recreate=args.recreate_database)
 
-    #db_server.set_host( host_fs, host_name=args.host_name, ipv4=args.host_ipv4)
     db_server.set_host( host_fs, args.host_name)
 
     #db_server.test_path_is_ignored( "/var/lib/docker/volumes/6eee01d3d25aa65deed671e75bd2b42bf3ffd68eb3c6f8c32439852c24d1a5bc/_data/temp")
+
 
     if args.subcommand == "clear":
         print( f"Deleted:", db_server.clear_folders_and_files())
@@ -162,24 +240,22 @@ def main() -> int:
             db_server.list_hosts( host_id='*')
 
     if args.subcommand == "count":
-        _hosts = None
-        if args.every_host:
-            _hosts = "*"
-        _del = None
-        if args.deleted:
-            _del = False
-        if args.hosts or not (args.ignores or args.folders or args.files):
-            host_cnt = db_server.count_hosts( all_or_deleted=_del)
-            print( f"Hosts: {host_cnt}")
-        if args.ignores or not (args.hosts or args.folders or args.files):
-            for host_id, ignore_cnt in db_server.count_ignores( host_id=_hosts, all_or_deleted=_del):
-                print( f"Ignores {host_id}: {ignore_cnt}")
-        if args.folders or not (args.hosts or args.ignores or args.files):
-            for host_id, folder_cnt in db_server.count_folders( host_id=_hosts, all_or_deleted=_del):
-                print( f"Folders {host_id}:: {folder_cnt}")
-        if args.files or not (args.hosts or args.ignores or args.folders):
-            for host_id, file_cnt in db_server.count_files( host_id=_hosts, all_or_deleted=_del):
-                print( f"Files {host_id}:: {file_cnt}")
+        with db_server.new_conn() as conn:
+            hosts = [ [ db_server.curr_host_id, db_server.curr_host_name ]]
+            if args.every_host:
+                hosts = list( db_server.all_hosts( conn, all_columns=True))
+                print( f"Hosts: {len(hosts)}")
+            _del = None
+            if args.deleted:
+                _del = False
+            for host_id, host_name, *rest in hosts:
+                print( f" Host ID: {host_id}  {host_name}")
+                if args.ignores or not (args.folders or args.files):
+                    print( f"  Ignores: {db_server.count_ignores( conn, host_id, all_or_deleted=_del)}") 
+                if args.folders or not (args.ignores or args.files):
+                    print( f"  Folders: {db_server.count_folders( conn, host_id, all_or_deleted=_del)}")
+                if args.files or not (args.ignores or args.folders):
+                    print( f"  Files:   {db_server.count_files( conn, host_id, all_or_deleted=_del)}")
 
     if args.subcommand == "check":
         if args.removed or not args.new_or_changed:

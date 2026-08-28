@@ -5,14 +5,16 @@ services:
       context: .
       dockerfile: Dockerfile.torch-python
       target: retinarcnn-python
-    command: python3 /app/ScanPhotoviewWithMaskRCNN.py
+    #command: python3 /app/ScanPhotoviewWithMaskRCNN.py
+    command: bash -c 'pip3 install -U "fastapi[standard]" fastapi-utilities uv && uv run fastapi dev --host 0.0.0.0 --port 8080 ./ScanFilesServer.py'
     privileged: true
     hostname: photoview-objectdetector-python
     container_name: photoview-objectdetector-python
     #restart: Never # unless-stopped
     restart: no
     ports:
-      - "80:80"
+      # for FastAPI
+      - "8080:8080"
     environment:
       PHOTOVIEW_MYSQL_URL: "${MARIADB_USER}:${MARIADB_PASSWORD}@tcp(photoview-mariadb)/${MARIADB_DATABASE}"
       PHOTOVIEW_LISTEN_IP: "0.0.0.0"

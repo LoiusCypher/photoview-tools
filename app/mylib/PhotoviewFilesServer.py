@@ -8,6 +8,68 @@ import sys
 
 from mylib.PhotoviewDbServer import PhotoviewDbServer
 
+from fastapi import FastAPI
+from typing import List, Optional, Union
+from pydantic import BaseModel, StrictInt, Field
+
+class Host(BaseModel):
+    host_id: StrictInt = Field( format='int64')
+    name: str
+    domain: Optional[str]
+    ipv4: Optional[str]
+    ipv6: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+class PutScanAction(BaseModel):
+    subtree: Optional[str]
+    for_removed: bool
+    for_new_or_updated: bool
+    add_missing_sha: bool
+
+class ScanAction(BaseModel):
+    action_id: StrictInt = Field( format='int64')
+    host_id: StrictInt = Field( format='int64')
+    subtree: Optional[str]
+    for_removed: bool
+    for_new_or_updated: bool
+    add_missing_sha: bool
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: Optional[datetime]
+
+class Ignore(BaseModel):
+    ignore_id: StrictInt = Field( format='int64')
+    host_id: StrictInt = Field( format='int64')
+    path_pattern: str
+    created_at: datetime
+    updated_at: datetime
+
+class Folder(BaseModel):
+    folder_id: StrictInt = Field( format='int64')
+    #parent_id: Optional[StrictInt = Field( format='int64')]
+    parent_id: Union[ None, int]
+    host_id: StrictInt = Field( format='int64')
+    path: str
+    path_hash: str
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: Optional[datetime]
+
+class File(BaseModel):
+    file_id: StrictInt = Field( format='int64')
+    folder_id: StrictInt = Field( format='int64')
+    file_name: str
+    length: StrictInt = Field( format='int64')
+    ctime_ns: StrictInt = Field( format='int64')
+    mtime_ns: StrictInt = Field( format='int64')
+    ctime: datetime
+    mtime: datetime
+    file_hash: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: Optional[datetime]
+
 class PhotoviewFilesServer( PhotoviewDbServer):
 
     def __init__(self, root, root_pwd, user, user_pwd, db_host_ip_or_dns, files_db_name, recreate=False, debug=True, debug_entry=False, debug_ignore=False):
@@ -48,8 +110,8 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             try:
                 cur.execute(f"CREATE TABLE IF NOT EXISTS `{self.files_db_name}`.`ignored_paths` ("
                             " `id` bigint(20) NOT NULL AUTO_INCREMENT,"
-                            " `created_at` datetime(3) DEFAULT NULL,"
-                            " `updated_at` datetime(3) DEFAULT NULL,"
+                            " `created_at` datetime(3) NOT NULL,"
+                            " `updated_at` datetime(3) NOT NULL,"
                             " `host_id` bigint(20) NOT NULL,"
                             " `path_pattern` varchar(750) NOT NULL,"
                             " PRIMARY KEY (`id`),"
@@ -60,14 +122,36 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                 sys.exit(1)
             #print("create_table_ignored_paths done")
 
+        def create_table_actions( conn):
+            # Get new Cursor
+            cur = conn.cursor()
+            try:
+                cur.execute(f"CREATE TABLE IF NOT EXISTS `{self.files_db_name}`.`actions` ("
+                            " `id` bigint(20) NOT NULL AUTO_INCREMENT,"
+                            " `created_at` datetime(3) NOT NULL,"
+                            " `updated_at` datetime(3) NOT NULL,"
+                            " `deleted_at` datetime(3) DEFAULT NULL,"
+                            " `host_id` bigint(20) NOT NULL,"
+                            " `subtree` varchar(750) DEFAULT NULL,"
+                            " `for_removed` boolean NOT NULL,"
+                            " `for_new_or_updated` boolean NOT NULL,"
+                            " `add_missing_sha` boolean NOT NULL,"
+                            " PRIMARY KEY (`id`),"
+                            " CONSTRAINT `fk_action_host` FOREIGN KEY (host_id) REFERENCES hosts (id) ON DELETE CASCADE ON UPDATE RESTRICT"
+                            " )")
+            except mariadb.Error as e:
+                print(f"Error connecting to MariaDB Platform Table: {e}")
+                sys.exit(1)
+            #print("create_table_actions done")
+
         def create_table_folders( conn):
             # Get new Cursor
             cur = conn.cursor()
             try:
                 cur.execute(f"CREATE TABLE IF NOT EXISTS `{self.files_db_name}`.`folders` ("
                             " `id` bigint(20) NOT NULL AUTO_INCREMENT,"
-                            " `created_at` datetime(3) DEFAULT NULL,"
-                            " `updated_at` datetime(3) DEFAULT NULL,"
+                            " `created_at` datetime(3) NOT NULL,"
+                            " `updated_at` datetime(3) NOT NULL,"
                             " `deleted_at` datetime(3) DEFAULT NULL,"
                             " `path` varchar(750) NOT NULL,"
                             " `path_hash` char(64) NOT NULL,"
@@ -88,8 +172,8 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             try:
                 cur.execute(f"CREATE TABLE IF NOT EXISTS `{self.files_db_name}`.`files` ("
                             " `id` bigint(20) NOT NULL AUTO_INCREMENT,"
-                            " `created_at` datetime(3) DEFAULT NULL,"
-                            " `updated_at` datetime(3) DEFAULT NULL,"
+                            " `created_at` datetime(3) NOT NULL,"
+                            " `updated_at` datetime(3) NOT NULL,"
                             " `deleted_at` datetime(3) DEFAULT NULL,"
                             " `file_name` varchar(256) NOT NULL,"
                             " `folder_id` bigint(20) NOT NULL,"
@@ -126,8 +210,10 @@ class PhotoviewFilesServer( PhotoviewDbServer):
         except mariadb.Error as e:
             print(f"Error connecting to MariaDB Privileges: {e}")
             sys.exit(1)
+        cur.execute(f"DROP TABLE IF EXISTS `{self.files_db_name}`.`actions` ;")
         cur.close()
         create_table_hosts( conn)
+        create_table_actions( conn)
         create_table_ignored_paths( conn)
         create_table_folders( conn)
         create_table_files( conn)
@@ -156,13 +242,56 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                     yield row[0]
                 row = cur.fetchone()
 
-    def all_ignores( self, conn, host_id, all_columns=False, all_or_deleted=None):
+    def all_actions( self, conn, action_id=None, host_id=None, all_columns=False, all_or_deleted=None):
+        columns = "id"
+        if all_columns:
+            columns += ", host_id, subtree, for_removed, for_new_or_updated, add_missing_sha, created_at, updated_at, deleted_at"
+        filter_str=""
+        filter_par=[]
+        if action_id is None:
+            if host_id is not None:
+                filter_str="WHERE host_id = ?"
+                filter_par.append( host_id)
+        else:
+            filter_str = "WHERE id = ?"
+            filter_par = [ action_id, ]
+        if all_or_deleted is None:
+            if filter_str == "":
+                filter_str += "WHERE"
+            else:
+                filter_str += " AND"
+            filter_str += " deleted_at IS NULL"
+        else:
+            if not all_or_deleted:
+                if filter_str == "":
+                    filter_str += "WHERE"
+                else:
+                    filter_str += " AND"
+                filter_str += " deleted_at IS NOT NULL"
+        with conn.cursor() as cur:
+            cur.execute( f"SELECT {columns} FROM `{self.files_db_name}`.`actions` {filter_str};", filter_par)
+            row = cur.fetchone()
+            while not row is  None:
+                if all_columns:
+                    #print(f"ID: {row[0]}, Name: {row[1]}, Domain: {row[2]}, IPv4: {row[3]}, IPv6: {row[4]}, Created: {row[5]}, Updated: {row[6]}")
+                    yield row
+                else:
+                    #print(f"ID: {row[0]})
+                    yield row[0]
+                row = cur.fetchone()
+
+    def all_ignores( self, conn, host_id=None, all_columns=False, all_or_deleted=None):
         columns = "id"
         if all_columns:
             columns += ", path_pattern, host_id, created_at, updated_at"
+        where_clause=""
+        where_param=[]
+        if host_id is not None:
+            where_clause="WHERE host_id = ?"
+            where_param.append( host_id)
         with conn.cursor() as cur:
             cur.execute( f"SELECT {columns} FROM `{self.files_db_name}`.`ignored_paths`"
-                         f" WHERE host_id = ? ORDER BY path_pattern;", ( host_id, ))
+                         f" {where_clause} ORDER BY host_id, path_pattern;", where_param)
             row = cur.fetchone()
             while not row is None:
                 #print(f"ID: {row[0]}, Path: {row[1]}")
@@ -174,57 +303,66 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                     yield row[0]
                 row = cur.fetchone()
 
-    def all_folders( self, conn, host_id=None, host_path=True, all_columns=False, all_or_deleted=None):
+    def all_folders( self, conn, folder_id=None, host_id=None, host_path=True, all_columns=False, all_or_deleted=None):
         if host_id is None:
             host_id = self.curr_host_id
         columns = "id, path"
         if all_columns:
             columns += ", path_hash, host_id, parent_id, created_at, updated_at, deleted_at"
-        filter_str = ""
+        filter_str = "WHERE host_id = ?"
+        filter_par = ( host_id, )
+        if folder_id is not None:
+            filter_str = "WHERE id = ?"
+            filter_par = ( folder_id, )
         if all_or_deleted is None:
-            filter_str = "AND deleted_at IS NULL"
+            filter_str += " AND deleted_at IS NULL"
         else:
             if not all_or_deleted:
-                filter_str = "AND deleted_at IS NOT NULL"
+                filter_str += " AND deleted_at IS NOT NULL"
         with conn.cursor() as cur:
             cur.execute( f"SELECT {columns} FROM `{self.files_db_name}`.`folders`"
-                         f" WHERE host_id = ? {filter_str} ORDER BY path;", ( host_id, ))
+                         f" {filter_str} ORDER BY path;", filter_par)
             row = cur.fetchone()
             while not row is None:
                 #print(f"ID: {row[0]}, Path: {row[1]}")
                 if host_path:
-                    if len(row) > 2:
-                         yield row[0], os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( row[1], '/'))), row[2:]
-                    else:
-                         yield row[0], os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( row[1], '/')))
+                    yield [os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( row[1], '/'))) if i == 1 else row[i] for i in range(len(row))]
                 else:
                     yield row
                 row = cur.fetchone()
 
-    def all_files( self, conn, folder_id=None, all_columns=False, all_or_deleted=None):
+    def all_files( self, conn, host_id=None, file_id=None, folder_id=None, all_columns=False, all_or_deleted=None):
         #print( f"files {folder_id = } {all_columns = } {all_or_deleted = }")
-        if folder_id is None:
-            where_str = ""
-            param_lst = ( )
-            if all_or_deleted is None:
-                where_str = "WHERE deleted_at IS NULL"
+        from_str = f" FROM `{self.files_db_name}`.`files`"
+        if file_id is None:
+            if folder_id is None:
+                if host_id is None:
+                    where_str = ""
+                    param_lst = ( )
+                    if all_or_deleted is None:
+                        where_str = "WHERE deleted_at IS NULL"
+                    else:
+                        if not all_or_deleted:
+                            where_str = "WHERE deleted_at IS NOT NULL"
+                else:
+                    from_str += f"JOIN `{self.files_db_name}`.`folders` ON files.folder_id = folders.id"
+                    where_str = "WHERE folders.host_id = ?"
+                    param_lst = ( host_id, )
             else:
-                if not all_or_deleted:
-                    where_str = "WHERE deleted_at IS NOT NULL"
+                where_str = "WHERE folder_id = ? "
+                param_lst = ( folder_id, )
+                if all_or_deleted is None:
+                    where_str += "AND deleted_at IS NULL"
+                else:
+                    if not all_or_deleted:
+                        where_str += "AND deleted_at IS NOT NULL"
         else:
-            where_str = "WHERE folder_id = ? "
-            param_lst = ( folder_id, )
-            if all_or_deleted is None:
-                where_str += "AND deleted_at IS NULL"
-            else:
-                if not all_or_deleted:
-                    where_str += "AND deleted_at IS NOT NULL"
+                where_str = "WHERE id = ? "
+                param_lst = ( file_id, )
         columns = "id, file_name"
         if all_columns:
-            columns += ", length, ctime_ns, mtime_ns, ctime, mtime, file_hash, created_at, updated_at, deleted_at"
-        stmt = f"SELECT {columns}" \
-               f" FROM `{self.files_db_name}`.`files`" \
-               f" {where_str} ORDER BY file_name ;"
+            columns += ", folder_id, length, ctime_ns, mtime_ns, ctime, mtime, file_hash, created_at, updated_at, deleted_at"
+        stmt = f"SELECT {columns} {from_str} {where_str} ORDER BY file_name ;"
         #print( stmt, param_lst)
         with conn.cursor() as cur:
             cur.execute( stmt, param_lst)
@@ -237,66 +375,167 @@ class PhotoviewFilesServer( PhotoviewDbServer):
     """ list_ =======================================================
     """
 
-    def list_hosts( self, host_id=None, all_or_deleted=None):
+    def list_hosts( self, host_id=None, all_or_deleted=None, for_api=False) -> Union[ None, Host, List[Host]]:
+
+        def print_host( host_row) -> None:
+            print( f"ID {host_row[0]}: {host_row[1]}.{host_row[2]}  IPv4 {host_row[3]}  IPv6 {host_row[4]}  {host_row[5]}  {host_row[6]}")
+
+        def api( row) -> Host:
+            return { "host_id": row[0], "name": row[1], "domain": row[2],
+                     "ipv4": row[3], "ipv6": row[4],
+                     "created_at": row[5], "updated_at": row[6]}
+
         with self.new_conn() as conn:
             if host_id == "*":
-                print( f"No host_id")
-                for host_row in self.all_hosts( conn, all_columns=True):
-                    print( f"Host {host_row[0]}: {host_row[1]}.{host_row[2]}  IPv4 {host_row[3]}  IPv6 {host_row[4]}  {host_row[5]}  {host_row[6]}")
+                #print( f"No host_id")
+                if for_api:
+                    return [ api( host_row) for host_row in self.all_hosts( conn, all_columns=True)]
+                else:
+                    for host_row in self.all_hosts( conn, all_columns=True):
+                        print_host( host_row)
             else:
                 if host_id is None:
                     host_id = self.curr_host_id
                 for host_row in self.all_hosts( conn, all_columns=True):
                     if host_id == host_row[0]:
-                        print( f"{host_row[0]}: {host_row[1]}.{host_row[2]}  IPv4 {host_row[3]}  IPv6 {host_row[4]}  {host_row[5]}  {host_row[6]}")
+                        if for_api:
+                            return api( host_row)
+                        else:
+                            print_host( host_row)
 
-    def list_ignore_patterns( self, host_id=None, all_or_deleted=None):
-        if self.debug_entry or self.debug_ignore: print( f"list_ignore_patterns {host_id = } {all_or_deleted = }")
+    def list_actions( self, action_id=None, host_id=None, all_or_deleted=None, for_api=False) -> Union[ None, ScanAction, List[ScanAction]]:
+
+        def api( row) -> ScanAction:
+            return { "action_id": row[0], "host_id": row[1], "subtree": row[2],
+                     "for_removed": row[3], "for_new_or_updated": row[4], "add_missing_sha": row[5],
+                     "created_at": row[6], "updated_at": row[7], "deleted_at": row[8]}
+
         with self.new_conn() as conn:
+            if action_id is None:
+                if host_id == "*":
+                    print( f"No host_id")
+                    if for_api:
+                        return [ api( row) for row in self.all_actions( conn, all_columns=True, all_or_deleted=all_or_deleted)]
+                    else:
+                        print( f"{host_id = }")
+                        #for row in self.all_actions( conn, host_id=host_id, all_columns=True, all_or_deleted=all_or_deleted):
+                        for row in self.all_actions( conn, all_columns=True, all_or_deleted=all_or_deleted):
+                            print( f"{row = }")
+                else:
+                    if host_id is None:
+                        host_id = self.curr_host_id
+                    if for_api:
+                        return [api( row) for row in self.all_actions( conn, host_id=host_id, all_columns=True, all_or_deleted=all_or_deleted)]
+                    else:
+                        for row in self.all_actions( conn, host_id=host_id, all_columns=True, all_or_deleted=all_or_deleted):
+                            print( f"{row = }")
+            else:
+                for row in self.all_actions( conn, action_id=action_id, all_columns=True, all_or_deleted=all_or_deleted):
+                    if for_api:
+                        return api( row)
+                    else:
+                        print( f"{row = }")
+
+    def list_ignores( self, ignore_id=None, host_id=None, all_or_deleted=None, for_api=False) -> Union[ None, Ignore, List[Ignore]]:
+
+        def api( row) -> Ignore:
+            return { "ignore_id": row[0], "host_id": row[2], "path_pattern": row[1],
+                     "created_at": row[3], "updated_at": row[4]}
+
+        with self.new_conn() as conn:
+          if ignore_id is None:
             if host_id == "*":
                 print( f"No host_id")
-                for host_id in self.all_hosts( conn):
-                    print( f"{host_id = }")
-                    for ignore in self.all_ignores( conn, host_id, all_columns=True, all_or_deleted=all_or_deleted):
-                        print( f"{ignore = }")
+                if for_api:
+                    return [ api( row) for row in self.all_ignores( conn, all_columns=True, all_or_deleted=all_or_deleted)]
+                else:
+                        for row in self.all_ignores( conn, all_columns=True, all_or_deleted=all_or_deleted):
+                            print( f"{row = }")
             else:
                 if host_id is None:
                     host_id = self.curr_host_id
-                for ignore in self.all_ignores( conn, host_id, all_columns=True, all_or_deleted=all_or_deleted):
-                    print( f"{ignore = }")
+                if for_api:
+                    return [api( row) for row in self.all_ignores( conn, host_id=host_id, all_columns=True, all_or_deleted=all_or_deleted)]
+                else:
+                    for row in self.all_ignores( conn, host_id=host_id, all_columns=True, all_or_deleted=all_or_deleted):
+                        print( f"{row = }")
+          else:
+              for row in self.all_ignores( conn, ignore_id=ignore_id, all_columns=True, all_or_deleted=all_or_deleted):
+                    if for_api:
+                        return api( row)
+                    else:
+                        print( f"{row = }")
 
-    def list_folders( self, host_id=None, all_or_deleted=None):
+    def list_folders( self, folder_id=None, host_id=None, all_or_deleted=None, for_api=False) -> Union[ None, Folder, List[Folder]]:
+
+        def api( row) -> Folder:
+            return { "folder_id": row[0], "parent_id": row[4], "host_id": row[3], "path": row[1], "path_hash": row[2],
+                     "created_at": row[5], "updated_at": row[6], "deleted_at": row[7]}
+
         with self.new_conn() as conn:
+          if folder_id is None:
             if host_id == "*":
                 print( f"No host_id")
-                for host_id in self.all_hosts( conn):
-                    print( f"{host_id = }")
-                    for folder in self.all_folders( conn, host_id, host_path=False, all_columns=True, all_or_deleted=all_or_deleted):
-                        print( f"{folder[1]}")
-                        print( f"    Host {folder[3]}: {folder[4]}-> {folder[0]}  #{folder[2]}  {folder[5]}  {folder[6]}  {folder[7]}")
+                if for_api:
+                    return [ api( row) for row in self.all_folders( conn, all_columns=True, all_or_deleted=all_or_deleted)]
+                else:
+                    for host_id in self.all_hosts( conn):
+                        print( f"{host_id = }")
+                        for folder in self.all_folders( conn, host_id, host_path=False, all_columns=True, all_or_deleted=all_or_deleted):
+                            print( f"{folder[1]}")
+                            print( f"    Host {folder[3]}: {folder[4]}-> {folder[0]}  #{folder[2]}  {folder[5]}  {folder[6]}  {folder[7]}")
             else:
                 if host_id is None:
                     host_id = self.curr_host_id
                 #print( f"list_folders {host_id = }")
-                for folder in self.all_folders( conn, host_id, host_path=False, all_columns=True, all_or_deleted=all_or_deleted):
-                    print( f"{folder[1]}")
-                    print( f"    Host {folder[3]}: {folder[4]}-> {folder[0]}  #{folder[2]}  {folder[5]}  {folder[6]}  {folder[7]}")
+                if for_api:
+                    return [api( row) for row in self.all_folders( conn, host_id=host_id, host_path=False, all_columns=True, all_or_deleted=all_or_deleted)]
+                else:
+                    for folder in self.all_folders( conn, host_id, host_path=False, all_columns=True, all_or_deleted=all_or_deleted):
+                        print( f"{folder[1]}")
+                        print( f"    Host {folder[3]}: {folder[4]}-> {folder[0]}  #{folder[2]}  {folder[5]}  {folder[6]}  {folder[7]}")
+          else:
+              for row in self.all_folders( conn, folder_id=folder_id, all_columns=True, all_or_deleted=all_or_deleted):
+                    if for_api:
+                        return api( row)
+                    else:
+                        print( f"{row = }")
 
-    def list_files( self, host_id=None, all_or_deleted=None):
+
+    def list_files( self, file_id=None, folder_id=None, host_id=None, all_or_deleted=None, for_api=False) -> Union[ None, File, List[File]]:
+
+        def api( row) -> File:
+            return { "file_id": row[0], "folder_id": row[2], "file_name": row[1], "length": row[3], "file_hash": row[8],
+                     "ctime_ns": row[4], "mtime_ns": row[5], "ctime": row[6], "mtime": row[7],
+                     "created_at": row[9], "updated_at": row[10], "deleted_at": row[11]}
+
         with self.new_conn() as conn:
+          if file_id is None:
             if host_id == "*":
                 print( f"No host_id")
-                for file_row in self.all_files( conn, all_columns=True, all_or_deleted=all_or_deleted):
-                    print( f"ID: {file_row[0]:7d} Length: {file_row[2]:9d}  CTime {file_row[5]}  MTime {file_row[6]}"
-                           f"#{file_row[7]} Del {file_row[10] if file_row[10] is not None else False}  {file_row[1]}")
+                if for_api:
+                    return [api( row) for row in self.all_files( conn, all_columns=True, all_or_deleted=all_or_deleted)]
+                else:
+                    for file_row in self.all_files( conn, all_columns=True, all_or_deleted=all_or_deleted):
+                        print( f"ID: {file_row[0]:7d} Length: {file_row[2]:9d}  CTime {file_row[5]}  MTime {file_row[6]}"
+                               f"#{file_row[7]} Del {file_row[10] if file_row[10] is not None else False}  {file_row[1]}")
             else:
                 if host_id is None:
                     host_id = self.curr_host_id
                 #print( f"list_files {host_id = }")
-                for folder_id, folder_path in self.all_folders( conn, host_id, host_path=False, all_or_deleted=True):
-                    for file_row in self.all_files( conn, folder_id, all_columns=True, all_or_deleted=all_or_deleted):
-                        print( f"ID: {file_row[0]:7d} Length: {file_row[2]:9d}  CTime {file_row[5]}  MTime {file_row[6]}"
-                               f"#{file_row[7]} Del {file_row[10] if file_row[10] is not None else False}  {file_row[1]}")
+                if for_api:
+                    return [api( row) for row in self.all_files( conn, host_id=host_id, all_columns=True, all_or_deleted=all_or_deleted)]
+                else:
+                    for folder_id, folder_path in self.all_folders( conn, host_id, host_path=False, all_or_deleted=True):
+                        for file_row in self.all_files( conn, folder_id, all_columns=True, all_or_deleted=all_or_deleted):
+                            print( f"ID: {file_row[0]:7d} Length: {file_row[2]:9d}  CTime {file_row[5]}  MTime {file_row[6]}"
+                                   f"#{file_row[7]} Del {file_row[10] if file_row[10] is not None else False}  {file_row[1]}")
+          else:
+              for row in self.all_files( conn, file_id=file_id, folder_id=folder_id, all_columns=True, all_or_deleted=all_or_deleted):
+                    if for_api:
+                        return api( row)
+                    else:
+                        print( f"{row = }")
 
     """ list_ =======================================================
     """
@@ -306,47 +545,19 @@ class PhotoviewFilesServer( PhotoviewDbServer):
             hosts = self.all_hosts( conn, all_columns=True)
             print( f"Hosts: {len(list(hosts))}")
 
-    def count_ignores( self, host_id=None, all_or_deleted=None):
+    def count_ignores( self, conn, host_id, all_or_deleted=None):
         if self.debug_entry or self.debug_ignore: print( f"count_ignore_patterns {host_id = } {all_or_deleted = }")
-        with self.new_conn() as conn:
-            if host_id == "*":
-                print( f"Every hosts")
-                return [ [ host_id, len(list(self.all_ignores( conn, host_id, all_columns=True, all_or_deleted=all_or_deleted)))] for host_id in self.all_hosts( conn)]
-            else:
-                if host_id is None:
-                    host_id = self.curr_host_id
-                ignores = self.all_ignores( conn, host_id, all_columns=True, all_or_deleted=all_or_deleted)
-                return [ [ host_id, len(list(ignores))]]
+        return len( list( self.all_ignores( conn, host_id, all_or_deleted=all_or_deleted)))
 
-    def count_folders( self, host_id=None, all_or_deleted=None):
-        with self.new_conn() as conn:
-            if host_id == "*":
-                print( f"Every hosts")
-                return [ [ host_id, len(list(self.all_folders( conn, host_id, all_or_deleted=all_or_deleted)))] for host_id in self.all_hosts( conn)]
-            else:
-                if host_id is None:
-                    host_id = self.curr_host_id
-                #print( f"count_folders {host_id = }")
-                folders = self.all_folders( conn, host_id, all_or_deleted=all_or_deleted)
-                return [ [host_id, len(list(folders))]]
+    def count_folders( self, conn, host_id, all_or_deleted=None):
+        return len( list( self.all_folders( conn, host_id, all_or_deleted=all_or_deleted)))
 
-    def count_host_files( self, conn, host_id, all_or_deleted):
-        #print( f"count_host:files {host_id = }")
+    def count_files( self, conn, host_id, all_or_deleted):
         file_cnt = 0
         for folder_id, _ in self.all_folders( conn, host_id, all_or_deleted=True):
             file_rows = self.all_files( conn, folder_id, all_or_deleted=all_or_deleted)
             file_cnt += len( list( file_rows))
         return file_cnt
-
-    def count_files( self, host_id=None, all_or_deleted=None):
-        with self.new_conn() as conn:
-            if host_id == "*":
-                print( f"Every hosts")
-                return [[host_id, self.count_host_files( conn, host_id, all_or_deleted)] for host_id in self.all_hosts( conn)]
-            else:
-                if host_id is None:
-                    host_id = self.curr_host_id
-                return [ [host_id, self.count_host_files( conn, host_id, all_or_deleted)]]
 
     """ PUBLIC hosts =======================================================
     """
@@ -400,7 +611,8 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                    '/home/helmut/docker/photoview/_container_dir/**',
                    '/home/helmut/docker/photoview/_container_dir_1/**', ],
             'debian-3':
-                 [ '/home/helmut/docker/photoview/photoview/**', ],
+                 [ '/home/helmut/docker/photoview/photoview/**',
+                   '/large_drive/helmut/docker/photoview/photoview/**', ],
             'ssstore':
                  [ '/dev/**', ],
         }
@@ -497,6 +709,23 @@ class PhotoviewFilesServer( PhotoviewDbServer):
                     print( f"_clean_up_ignored: {host_id = } deleting {os.path.join( folder_path, file_name) = }")
                     self.delete_file_id( conn, file_id)
 
+    def create_action( self, host_id, scan_action: PutScanAction) -> int:
+        with self.new_conn() as conn:
+            with conn.cursor() as cur:
+                try:
+                    cur.execute( f"INSERT INTO `{self.files_db_name}`.`actions`" \
+                                 f" ( host_id, subtree, for_removed, for_new_or_updated, add_missing_sha, created_at, updated_at )" \
+                                 f" VALUES ( ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3) ) " \
+                                 f" RETURNING id ;",
+                             ( host_id, scan_action.subtree, scan_action.for_removed, scan_action.for_new_or_updated, scan_action.add_missing_sha, ))
+                    rows = cur.fetchall()
+                    assert len( rows) == 1
+                except mariadb.Error as e:
+                    print(f"Error connecting to MariaDB: (create_ignored_folder) {e}")
+                    sys.exit(1)
+            conn.commit()
+        return rows[0][0]
+
     def create_ignored_pattern( self, conn, host_id, path_pattern):
         if self.debug_entry or self.debug_ignore: print( f"create_ignored_pattern {host_id = } {path_pattern = }")
         with conn.cursor() as cur:
@@ -533,6 +762,24 @@ class PhotoviewFilesServer( PhotoviewDbServer):
         if id is None:
             new_id = self.create_ignored_pattern( conn, host_id, path_pattern)
         return id is None # created new?
+
+    def delete_action( self, action_id: int) -> int:
+        #print( action_id)
+        with self.new_conn() as conn:
+            with conn.cursor() as cur:
+                try:
+                    cur.execute( f"UPDATE `{self.files_db_name}`.`actions`" \
+                                 f" SET deleted_at = CURRENT_TIMESTAMP(3) " \
+                                 f" WHERE id = ? AND deleted_at IS NULL" \
+                                 f" ;", ( action_id, ))
+                    rows = cur.rowcount
+                    #print( rows)
+                    assert rows == 1
+                except mariadb.Error as e:
+                    print( f"Error connecting to MariaDB Privileges: {e}")
+                    sys.exit(1)
+            conn.commit()
+        return action_id
 
     def remove_ignore_pattern( self, path_pattern, host_id=None):
         if self.debug_entry or self.debug_ignore: print( f"remove_ignore_pattern {path_pattern = } {host_id = }")

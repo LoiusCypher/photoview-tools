@@ -9,39 +9,35 @@ servers:
     description: Current development server
 
 paths:
-  /v1/servers:
-    summary: Represents the servers / hosts where files and folders can be found
+  /v1/hosts:
+    summary: Represents the hosts where files and folders can be found
     description: Optional extended description in CommonMark or HTML.
     get:
-      summary: Returns a list of servers.
+      summary: Returns a list of hosts.
       description: Optional extended description in CommonMark or HTML.
       responses:
         "200": # status code
-          description: A JSON array of server attributes
+          description: A JSON array of host attributes
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Server"
+                  $ref: "#/components/schemas/Host"
     put:
     post:
     delete:
-  /v1/servers/{id}:
-    summary: Represents a server
+  /v1/hosts/{id}:
+    summary: Represents a hosts
     description: >
-      This resource represents an individual server on the network.
-      Each server is identified by a numeric `id`.
+      This resource represents an individual hosts on the network.
+      Each host is identified by a numeric `id`.
   /v1/ignores:
   /v1/ignores/{id}:
   /v1/folders:
   /v1/folders/{id}:
-  /v1/servers/{id}/ignores:
-  /v1/servers/{id}/ignores/{id}:
-  /v1/servers/{id}/folders:
-  /v1/servers/{id}/folders/{id}:
-  /v1/servers/{id}/folders/{id}/files:
-  /v1/servers/{id}/folders/{id}/files/{id}:d
+  /v1/hosts/{id}/ignores:
+  /v1/hosts/{id}/folders:
   /v1/folders/{id}/files:
   /v1/folders/{id}/files/{id}:
   /v1/files:
