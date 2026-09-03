@@ -1,6 +1,6 @@
 ARG BASE=python:3.12-trixie
 # requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
-FROM ${BASE} AS retinarcnn-python
+FROM ${BASE} AS retinarcnn-python-base
 
 RUN apt update && apt upgrade -y && apt install -y qtwayland5 xdg-utils dbus-x11 libxcb-cursor0 libxcb-glx0 libgl1-mesa-dev
 RUN apt install -y git mariadb-client gcc # mariadb-connector-c-devel python3-devel 
@@ -14,6 +14,12 @@ RUN sed -i -e "s:np\.bool:bool:g" /Mask-RCNN_model/mrcnn/utils.py
 COPY app /app
 COPY labelme /app/labelme
 WORKDIR /app
+
+FROM retinarcnn-python-base AS filescanner
+RUN pip3 install -r requirements-scanner.txt
+
+FROM retinarcnn-python-base AS retinarcnn-python
+
 RUN pip3 install -r requirements.txt
 RUN pip3 install "labelme>=7.0.4" labelme2coco
 

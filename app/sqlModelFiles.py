@@ -6,16 +6,20 @@ import os
 import pathlib
 import sys
 
-from mylib.PhotoviewDbServer import PhotoviewDbServer
-
 from fastapi import FastAPI
 from typing import List, Optional, Union
 from pydantic import BaseModel, StrictInt, Field
 
-class Host(BaseModel):
-    host_id: StrictInt = Field( format='int64')
+from sqlmodel import Field, SQLModel
+
+class Host( SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
     name: str
-    domain: Optional[str]
+    secret_name: str
+    age: int | None = None
+
+    host_id: StrictInt = Field( format='int64')
+    domain: str | None = None
     ipv4: Optional[str]
     ipv6: Optional[str]
     created_at: datetime
