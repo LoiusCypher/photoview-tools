@@ -119,7 +119,7 @@ class Folder(BaseModel):
     parent_id: Union[ None, int]
     path: str
     path_hash: str
-    depth: int
+    depth: Optional[int]
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime]
@@ -132,7 +132,7 @@ class T_Folders(Base):
     parent_id: sqlalchemy.orm.Mapped[int] = sqlalchemy.orm.mapped_column(sqlalchemy.ForeignKey("folders.id", ondelete="CASCADE"), nullable=True, default=None)
     path = sqlalchemy.Column( sqlalchemy.String(length=750), nullable=False)
     path_hash = sqlalchemy.Column( sqlalchemy.String(length=64).with_variant( sqlalchemy.dialects.mysql.CHAR(64), "mariadb"), nullable=False)
-    depth = sqlalchemy.Column(sqlalchemy.Integer())
+    depth = sqlalchemy.Column(sqlalchemy.Integer(), nullable=True)
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
                                     nullable=False, default=datetime.now)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
@@ -144,11 +144,11 @@ class T_Folders(Base):
     ##parent = sqlalchemy.orm.relationship( "T_Folders", remote_side=[id])
     #parent: sqlalchemy.orm.Mapped[Optional["T_Folders"]] = sqlalchemy.orm.relationship( "T_Folders", single_parent=True, back_populates="childs", cascade="all, delete-orphan", remote_side=[id])
     parent: sqlalchemy.orm.Mapped[Optional["T_Folders"]] = sqlalchemy.orm.relationship( "T_Folders", single_parent=True, cascade="all, delete-orphan", remote_side=[id])
-    #childs = sqlalchemy.orm.relationship( "T_Folders", back_populates="parent")
+    childs: sqlalchemy.orm.Mapped[List["T_Folders"]] = sqlalchemy.orm.relationship( back_populates="parent")
     files: sqlalchemy.orm.Mapped[List["T_Files"]] = sqlalchemy.orm.relationship(back_populates="folder")
 
     def __repr__(self):
-        return f"<Folder(id='{self.id}', host_id='{self.host_id}', parent_id='{self.parent_id}', path='{self.path}', path_hash='{self.path_hash}'" \
+        return f"<Folder(id='{self.id}', host_id='{self.host_id}', parent_id='{self.parent_id}', depth='{self.depth}', path='{self.path}', path_hash='{self.path_hash}'" \
                f" created_at='{self.created_at}', updated_at='{self.updated_at}', deleted_at='{self.deleted_at}'>"
 
 class File(BaseModel):
@@ -162,6 +162,8 @@ class File(BaseModel):
     mtime: datetime
     file_hash: Optional[str]
     created_at: datetime
+    updated_at: datetime
+    deleted_at: Optional[datetime]
 
 class T_Files(Base):
     __tablename__ = 'files'
@@ -190,93 +192,3 @@ class T_Files(Base):
 
 print(sqlalchemy.__version__)
 
-class FilesDB( object):
-    """ A class to create and drop filesDB tables and provide a session for it """
-    # Define the MariaDB engine using MariaDB Connector/Python
-    #engine = sqlalchemy.create_engine("mariadb+mariadbconnector://photoview:photosecret@192.168.2.227:3306/objectdetector")
-    engine = sqlalchemy.create_engine("mariadb+mariadbconnector://photoview:photosecret@192.168.2.227:3306/filesdb")
-
-    def __init__( self, host_name: str, root_in_container: str):
-        def set_curr_host( host_name):
-            with self.engine.connect() as conn:
-                rows = conn.execute( sqlalchemy.select(T_Hosts.id).where(T_Hosts.name==host_name)).all()
-                #print( len( rows), host_name, rows )
-                assert len( rows) <= 1
-                if len( rows) == 1:
-                    self.host_id = rows[0][0]
-                else:
-                    stmt = sqlalchemy.insert(T_Hosts).values(name=host_name, domain=None, ipv4=None, ipv6=None)
-                    rows = conn.execute( stmt)
-                    conn.commit()
-                    print( "inserted key", rows.inserted_primary_key)
-                    self.host_id = rows.inserted_primary_key
-            self.host_name = host_name
-
-        self.root_in_container = root_in_container
-        Base.metadata.create_all( self.engine)
-        set_curr_host( host_name)
-        #set_curr_host( "test3")
-        # Create a session
-        self.Session = sqlalchemy.orm.sessionmaker()
-        self.Session.configure(bind=self.engine)
-        with self.Session() as session:
-            self.ignores = session.scalar( sqlalchemy.select( T_Ignores.path_pattern).where(T_Ignores.host_id==self.host_id).order_by( T_Ignores.path_pattern))
-
-    def is_container_path( self, path: str) -> bool:
-        return os.path.abspath( path).startswith( self.root_in_container)
-
-    def host_to_container_path( self, host_path: str) -> str:
-        host_abs_path = os.path.abspath( host_path)
-        #print( f"host_to_container_path: {host_path = } {host_abs_path = }")
-        #print( f"host_to_container_path: {os.path.relpath( host_abs_path, '/') = }")
-        container_path = os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( host_abs_path, '/')))
-        return container_path
-
-    def container_to_host_path( self, container_path: str) -> str:
-        container_abs_path = os.path.abspath( container_path)
-        host_path = os.path.abspath( os.path.join( '/', os.path.relpath( container_abs_path, self.root_in_container)))
-        return host_path
-
-    def get_folder_id( self, conn, host_id: int, folder_path: str) -> int:
-        path_hash = hashlib.md5( folder_path.encode()).hexdigest()
-        stmt = sqlalchemy.select( T_Folders.id).where( T_Folders.host_id==host_id, T_Folders.path_hash==path_hash, T_Folders.deleted_at==None)
-        results = conn.execute( stmt).all()
-        #print( f"get_file_id: {len(results)} {results}")
-        assert len(results) <= 1
-        if len(results) == 0:
-            #print( f"get_folder_id new folder {folder_path = }")
-            stmt = sqlalchemy.insert( T_Folders).values( {'host_id': host_id, 'path': folder_path, 'path_hash': path_hash})
-            results = conn.execute( stmt)
-            assert len(results.inserted_primary_key) == 1
-            conn.commit()
-            #print( f"get_folder_id returns new id: {results.inserted_primary_key[0]}")
-            return results.inserted_primary_key[0]
-        #print( f"get_folder_id returns: {results[0][0]}")
-        return results[0][0]
-
-    def get_file_id( self, conn, folder_id: int, file_name: str, file_stat, file_hash=None) -> int:
-        stmt = sqlalchemy.select( T_Files.id).where( T_Files.folder_id==folder_id, T_Files.file_name==file_name, T_Files.deleted_at==None)
-        results = conn.execute( stmt).all()
-        #print( f"get_file_id: {len(results)} {results}")
-        assert len(results) <= 1
-        if len(results) == 0:
-            #print( f"get_file_id new file {file_name}")
-            stmt = sqlalchemy.insert( T_Files).values( {'folder_id': folder_id, 'file_name': file_name, 'length': file_stat.st_size,
-                                                        'ctime_ns': file_stat.st_ctime_ns, 'mtime_ns': file_stat.st_mtime_ns,
-                                                        'ctime': datetime.fromtimestamp( file_stat.st_ctime_ns / 1e9, tz=timezone.utc),
-                                                        'mtime': datetime.fromtimestamp( file_stat.st_mtime_ns / 1e9, tz=timezone.utc),
-                                                        'file_hash': file_hash})
-            results = conn.execute( stmt)
-            assert len(results.inserted_primary_key) == 1
-            conn.commit()
-            #print( f"get_file_id returns new id: {results.inserted_primary_key[0]}")
-            return results.inserted_primary_key[0]
-        #print( f"get_file_id returns: {results[0][0]}")
-        return results[0][0]
-
-    def drop_tables( self) -> None:
-        T_Files.__table__.drop( self.engine)
-        T_Folders.__table__.drop( self.engine)
-        T_Actions.__table__.drop( self.engine)
-        T_Ignores.__table__.drop( self.engine)
-        T_Hosts.__table__.drop( self.engine)
