@@ -559,10 +559,6 @@ def check_for_removed_items( db, container_subtree_to_check: str, progress: Prog
                     session.commit()
                 if progress.tick( session):
                     print( progress.status_msg())
-                    # results = session.execute( sqlalchemy.update(T_Actions).values( { 'for_new_or_updated_progress': progress.percent()}).where(T_Actions.id==action_id))
-                    #print(sqlalchemy.update(progress.table).values({ progress.column(): progress.percent()}).where( progress.table.id==progress.action_id))
-                    #results = session.execute( sqlalchemy.update(progress.table).values( { progress.column(): progress.percent()}).where( progress.table.id==progress.action_id))
-                    #results = session.execute( progress.stmt())
             #else:
                 #print( f"Skip {container_folder_path = } {folder.id = } not part of {container_subtree_to_check = }")
         session.commit()
@@ -651,16 +647,10 @@ def check_for_new_or_updated_items( db, container_subtree_to_check: str, sha: bo
                         print( f"IS NOT file NOR link {file_path_}")
         if progress.tick( session):
              print( progress.status_msg())
-             #results = session.execute( progress.stmt())
-             #results = session.execute( sqlalchemy.update(T_Actions).values( { 'for_new_or_updated_progress': progress.percent()}).where(T_Actions.id==action_id))
              if sha:
-                 results = session.execute( sqlalchemy.update(T_Actions).values( { 'add_missing_sha_progress': progress.percent()}).where(T_Actions.id==action_id))
-             session.commit()
-        #temp = progr['res'] * progr['rng'] * folder_progr
-        #cond = temp % progr['cnt'] < (progr['res'] * progr['rng'])
-        #if cond:
-            #perc = progr['min'] + int( temp / progr['cnt']) / progr['res']
-            #print( f"{perc} {progr['cnt']}/{folder_progr} {datetime.now()-start}")
+                 stmt = sqlalchemy.update(T_Actions).values( { 'add_missing_sha_progress': progress.percent}).where(T_Actions.id==progress.action_id)
+                 results = session.execute( stmt)
+                 session.commit()
     print( f"check_for_new_or_updated_items END")
 
 

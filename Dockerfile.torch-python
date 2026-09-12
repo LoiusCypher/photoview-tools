@@ -1,4 +1,5 @@
-ARG BASE=python:3.12-trixie
+#ARG BASE=python:3.12-trixie
+ARG BASE=python:3.14-trixie
 # requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
 FROM ${BASE} AS retinarcnn-python-base
 
@@ -11,14 +12,18 @@ RUN pip3 install --upgrade pip
 RUN git clone https://github.com/LoiusCypher/Mask-RCNN_TF2.14.0.git /Mask-RCNN_model
 
 RUN sed -i -e "s:np\.bool:bool:g" /Mask-RCNN_model/mrcnn/utils.py
-COPY app /app
-COPY labelme /app/labelme
+#COPY app /app
+#COPY labelme /app/labelme
+COPY app/FastapiFilesServer.py app/alchemyFilesDB.py app/alchemyModelFiles.py app/Progress.py /app
 WORKDIR /app
 
 FROM retinarcnn-python-base AS filescanner
 RUN pip3 install -r requirements-scanner.txt
 
 FROM retinarcnn-python-base AS retinarcnn-python
+
+COPY app /app
+COPY labelme /app/labelme
 
 RUN pip3 install -r requirements.txt
 RUN pip3 install "labelme>=7.0.4" labelme2coco

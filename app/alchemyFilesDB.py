@@ -10,10 +10,7 @@ from sqlalchemy.dialects.mysql import INET4, INET6
 from typing import List, Optional, Union
 from pydantic import BaseModel, StrictInt, Field
 from alchemyModelFiles import Base, T_Hosts, Host, PutHost, T_Ignores, Ignore, PutIgnore, T_Actions, Action, PutAction, T_Folders, Folder, T_Files, File
-#from alchemyModelFiles import T_Hosts, Host, PutHost, T_Ignores, Ignore, PutIgnore, T_Actions, Action, PutAction, T_Folders, Folder, PutFolder, T_Files, File, PutFile
 
-
-#Base = sqlalchemy.orm.declarative_base()
 
 class FilesDBBase( object):
     """ A class to create and drop filesDB tables and provide a session for it """
