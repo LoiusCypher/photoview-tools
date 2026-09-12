@@ -1,5 +1,5 @@
 #ARG BASE=python:3.12-trixie
-ARG BASE=python:3.14-trixie
+ARG BASE=python:3.13-trixie
 # requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
 FROM ${BASE} AS retinarcnn-python-base
 
