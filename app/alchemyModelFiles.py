@@ -34,10 +34,9 @@ class T_Hosts(Base):
     ipv4 = sqlalchemy.Column( sqlalchemy.dialects.mysql.INET4())
     ipv6 = sqlalchemy.Column( sqlalchemy.dialects.mysql.INET6())
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now)
+                                    nullable=False, default=datetime.utcnow)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now, onupdate=datetime.now)
-    ''' CONFIRMED upto here ''' 
+                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     ignores: sqlalchemy.orm.Mapped[List["T_Ignores"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
                                                                           cascade="all, delete", passive_deletes=True)
     actions: sqlalchemy.orm.Mapped[List["T_Actions"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
@@ -65,9 +64,9 @@ class T_Ignores(Base):
     host_id = sqlalchemy.orm.mapped_column( sqlalchemy.ForeignKey("hosts.id", ondelete="CASCADE"))
     path_pattern = sqlalchemy.Column( sqlalchemy.String(length=750), nullable=False)
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now)
+                                    nullable=False, default=datetime.utcnow)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now, onupdate=datetime.now)
+                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     host: sqlalchemy.orm.Mapped["T_Hosts"] = sqlalchemy.orm.relationship(back_populates="ignores", cascade="all, delete-orphan",  single_parent=True,passive_deletes=True)
 
@@ -84,9 +83,13 @@ class PutAction(BaseModel):
 class Action(PutAction):
     id: StrictInt = Field( format='int64')
     host_id: StrictInt = Field( format='int64')
-    started_at: Optional[datetime]
+    for_removed_progress: float=0.0
+    for_new_or_updated_progress: float =0.0
+    add_missing_sha_progress: float =0.0
     created_at: datetime
+    started_at: Optional[datetime]
     updated_at: datetime
+    expected_at: Optional[datetime]
     deleted_at: Optional[datetime]
 
 class T_Actions(Base):
@@ -96,13 +99,18 @@ class T_Actions(Base):
     host_id: sqlalchemy.orm.Mapped[int] = sqlalchemy.orm.mapped_column(sqlalchemy.ForeignKey("hosts.id", ondelete="CASCADE"))
     subtree = sqlalchemy.Column( sqlalchemy.String(length=750))
     for_removed = sqlalchemy.Column( sqlalchemy.Boolean(), default=False, nullable=True)
+    for_removed_progress = sqlalchemy.Column( sqlalchemy.Float(), default=0.0, nullable=False)
     for_new_or_updated = sqlalchemy.Column( sqlalchemy.Boolean(), default=False, nullable=True)
+    for_new_or_updated_progress = sqlalchemy.Column( sqlalchemy.Float(), default=0.0, nullable=False)
     add_missing_sha = sqlalchemy.Column( sqlalchemy.Boolean(), default=False, nullable=True)
+    add_missing_sha_progress = sqlalchemy.Column( sqlalchemy.Float(), default=0.0, nullable=False)
+    # = sqlalchemy.Column( sqlalchemy.Float(), default=0.0, nullable=False)
     started_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
+    expected_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now)
+                                    nullable=False, default=datetime.utcnow)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now, onupdate=datetime.now)
+                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow) # datetime.now)
     deleted_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
 
     host: sqlalchemy.orm.Mapped["T_Hosts"] = sqlalchemy.orm.relationship( back_populates="actions", single_parent=True,
@@ -134,9 +142,9 @@ class T_Folders(Base):
     path_hash = sqlalchemy.Column( sqlalchemy.String(length=64).with_variant( sqlalchemy.dialects.mysql.CHAR(64), "mariadb"), nullable=False)
     depth = sqlalchemy.Column(sqlalchemy.Integer(), nullable=True)
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now)
+                                    nullable=False, default=datetime.utcnow)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now, onupdate=datetime.now)
+                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     deleted_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
 
     host: sqlalchemy.orm.Mapped["T_Hosts"] = sqlalchemy.orm.relationship(back_populates="folders", single_parent=True,
@@ -178,9 +186,9 @@ class T_Files(Base):
     mtime = sqlalchemy.Column(sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'), nullable=False)
     file_hash = sqlalchemy.Column(sqlalchemy.String(length=128).with_variant( sqlalchemy.dialects.mysql.CHAR(128), "mariadb"))
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now)
+                                    nullable=False, default=datetime.utcnow)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.now, onupdate=datetime.now)
+                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     deleted_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
 
     folder: sqlalchemy.orm.Mapped["T_Folders"] = sqlalchemy.orm.relationship(back_populates="files", single_parent=True, cascade="all, delete-orphan")

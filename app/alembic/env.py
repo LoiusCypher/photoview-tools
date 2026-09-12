@@ -1,153 +1,85 @@
-# A generic, single database configuration.
+from logging.config import fileConfig
 
-[alembic]
-# path to migration scripts.
-# this is typically a path given in POSIX (e.g. forward slashes)
-# format, relative to the token %(here)s which refers to the location of this
-# ini file
-script_location = %(here)s/alembic
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
 
-# template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
-# Uncomment the line below if you want the files to be prepended with date and time
-# file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s
-# Or organize into date-based subdirectories (requires recursive_version_locations = true)
-# file_template = %%(year)d/%%(month).2d/%%(day).2d_%%(hour).2d%%(minute).2d_%%(second).2d_%%(rev)s_%%(slug)s
+from alembic import context
 
-# sys.path path, will be prepended to sys.path if present.
-# defaults to the current working directory.
-prepend_sys_path = .
+#import migration_types # import INET4, INET6
+from sqlalchemy.dialects.mysql import INET4, INET6
 
-# timezone to use when rendering the date within the migration file
-# as well as the filename.
-# If specified, requires the python>=3.9 or backports.zoneinfo library and tzdata library.
-# Any required deps can installed by adding `alembic[tz]` to the pip requirements
-# string value is passed to ZoneInfo()
-# leave blank for localtime
-# timezone =
+# this is the Alembic Config object, which provides
+# access to the values within the .ini file in use.
+config = context.config
 
-# max length of characters to apply to the
-# "slug" field
-# truncate_slug_length = 40
+# Interpret the config file for Python logging.
+# This line sets up loggers basically.
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
 
-# set to 'true' to run the environment during
-# the 'revision' command, regardless of autogenerate
-# revision_environment = false
+# add your model's MetaData object here
+# for 'autogenerate' support
+from alchemyModelFiles import Base
+target_metadata = Base.metadata
 
-# set to 'true' to allow .pyc and .pyo files without
-# a source .py file to be detected as revisions in the
-# versions/ directory
-# sourceless = false
+# other values from the config, defined by the needs of env.py,
+# can be acquired:
+# my_important_option = config.get_main_option("my_important_option")
+# ... etc.
 
-# version location specification; This defaults
-# to <script_location>/versions.  When using multiple version
-# directories, initial revisions must be specified with --version-path.
-# the special token `%(here)s` is available which indicates the absolute path
-# to this configuration file.
-#
-# The path separator used here should be the separator specified by "version_path_separator" below.
-# version_locations = %(here)s/bar:%(here)s/bat:%(here)s/alembic/versions
 
-# path_separator (New in Alembic 1.16.0, supersedes version_path_separator);
-# This indicates what character is used to
-# split lists of file paths, including version_locations and prepend_sys_path
-# within configparser files such as alembic.ini.
-#
-# The default rendered in new alembic.ini files is "os", which uses os.pathsep
-# to provide os-dependent path splitting.
-#
-# Note that in order to support legacy alembic.ini files, this default does NOT
-# take place if path_separator is not present in alembic.ini.  If this
-# option is omitted entirely, fallback logic is as follows:
-#
-# 1. Parsing of the version_locations option falls back to using the legacy
-#    "version_path_separator" key, which if absent then falls back to the legacy
-#    behavior of splitting on spaces and/or commas.
-# 2. Parsing of the prepend_sys_path option falls back to the legacy
-#    behavior of splitting on spaces, commas, or colons.
-#
-# Valid values for path_separator are:
-#
-# path_separator = :
-# path_separator = ;
-# path_separator = space
-# path_separator = newline
-#
-# Use os.pathsep. Default configuration used for new projects.
-path_separator = os
+def run_migrations_offline() -> None:
+    """Run migrations in 'offline' mode.
 
-# set to 'true' to search source files recursively
-# in each "version_locations" directory
-# new in Alembic version 1.10
-# recursive_version_locations = false
+    This configures the context with just a URL
+    and not an Engine, though an Engine is acceptable
+    here as well.  By skipping the Engine creation
+    we don't even need a DBAPI to be available.
 
-# the output encoding used when revision files
-# are written from script.py.mako
-# output_encoding = utf-8
+    Calls to context.execute() here emit the given string to the
+    script output.
 
-# database URL.  This is consumed by the user-maintained env.py script only.
-# other means of configuring database URLs may be customized within the env.py
-# file.
-# See notes in "escaping characters in ini files" for guidelines on
-# passwords
-sqlalchemy.url = mariadb+mariadbconnector://photoview:photosecret@192.168.2.227/filesdb
+    """
+    url = config.get_main_option("sqlalchemy.url")
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
 
-# [post_write_hooks]
-# This section defines scripts or Python functions that are run
-# on newly generated revision scripts.  See the documentation for further
-# detail and examples
+    with context.begin_transaction():
+        context.run_migrations()
 
-# format using "black" - use the console_scripts runner,
-# against the "black" entrypoint
-# hooks = black
-# black.type = console_scripts
-# black.entrypoint = black
-# black.options = -l 79 REVISION_SCRIPT_FILENAME
 
-# lint with attempts to fix using "ruff" - use the module runner, against the "ruff" module
-# hooks = ruff
-# ruff.type = module
-# ruff.module = ruff
-# ruff.options = check --fix REVISION_SCRIPT_FILENAME
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode.
 
-# Alternatively, use the exec runner to execute a binary found on your PATH
-# hooks = ruff
-# ruff.type = exec
-# ruff.executable = ruff
-# ruff.options = check --fix REVISION_SCRIPT_FILENAME
+    In this scenario we need to create an Engine
+    and associate a connection with the context.
 
-# Logging configuration.  This is also consumed by the user-maintained
-# env.py script only.
-[loggers]
-keys = root,sqlalchemy,alembic
+    """
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
+        poolclass=pool.NullPool,
+    )
 
-[handlers]
-keys = console
+    with connectable.connect() as connection:
+        #connection.dialect.ischema_names['inet4'] = migration_types.INET4()
+        #connection.dialect.ischema_names['inet6'] = migration_types.INET6()
+        #connection.dialect.ischema_names['inet4'] = INET4()
+        #connection.dialect.ischema_names['inet6'] = INET6()
+        context.configure(
+            connection=connection, target_metadata=target_metadata,
+            #user_module_prefix="migration_types.",
+        )
 
-[formatters]
-keys = generic
+        with context.begin_transaction():
+            context.run_migrations()
 
-[logger_root]
-level = WARNING
-handlers = console
-qualname =
 
-[logger_sqlalchemy]
-level = WARNING
-handlers =
-qualname = sqlalchemy.engine
-
-[logger_alembic]
-level = INFO
-handlers =
-qualname = alembic
-
-[handler_console]
-class = StreamHandler
-args = (sys.stderr,)
-level = NOTSET
-formatter = generic
-
-[formatter_generic]
-format = %(levelname)-5.5s [%(name)s] %(message)s
-datefmt = %H:%M:%S
-
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()

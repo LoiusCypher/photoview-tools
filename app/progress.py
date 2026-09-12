@@ -1,41 +1,86 @@
 from datetime import datetime, timezone
 from typing import List, Optional
+import sqlalchemy
 
 class Progress( object):
 
-    def __init__( self, resolution: int, ranges: List[int], counts: List[int]) -> None:
-        self.resolution = resolution
-        self.ranges = ranges
+    def __init__( self, table: object, column: str, action_id: int, steps: int, resolution: int=1) -> None:
+        self.table = table
+        self.columns = [ column, ]
+        self.action_id = action_id
+        self.resolution = [ resolution, ]
+        self.steps = [ steps, ]
+        self.ranges = [ 0, 100,]
         self.active_step = None
-        assert len( counts) + 1 == len( self.ranges)
-        self.steps = counts
+        #print( f"__init__ {self.column = } {self.action_id} {self.resolution} {self.steps} {self.ranges}")
+
+    def add_task( self, column: str, steps: Optional[int]=None, resolution: Optional[int]=None, ranges: Optional[List[int]|int]=None) -> None:
+        #print( f"add_task {column = } {steps = } {resolution = } {ranges = }")
+        self.columns.append( column)
+        #print( f"add_task {self.columns = }")
+        if resolution:
+            self.resolution.append( resolution)
+        else:
+            #print( f"add_taski {self.resolution[-1] = }")
+            self.resolution.append( self.resolution[-1])
+        #print( f"add_task {self.resolution = }")
+        if steps:
+            self.steps.append( steps)
+        else:
+            self.steps.append( self.steps[-1])
+        #print( f"add_task {self.steps = }")
+        if not ranges:
+            ranges = int( 100 / len( self.ranges))
+        if isinstance( ranges, int):
+            self.ranges = [ int(border * (100 - ranges) / 100) for border in self.ranges]
+            self.ranges.append( 100)
+        else:
+            assert len(ranges) == len( self.ranges) + 1
+            self.ranges = ranges
+        #print( f"add_task {self.ranges = }")
 
     def start_next( self) -> None:
+        #print( f"start_next")
         if self.active_step is None:
             self.active_step = 0
+            self.started = datetime.now( timezone.utc)
         else:
             self.active_step += 1
         #print( f"{self.active_step} {len(self.ranges)} {self.steps}")
         assert self.active_step < (len( self.ranges) - 1)
-        self.ticks = 0
-        self.res_rng = self.resolution * (self.ranges[self.active_step+1] - self.ranges[self.active_step])
-        #print( f"{self.res_rng} {self.resolution} {self.ranges[self.active_step+1]} - {self.ranges[self.active_step]}")
-        self.started = datetime.now( timezone.utc)
+        self.step_ticks = 0
+        self.res_rng = self.resolution[self.active_step] * (self.ranges[self.active_step+1] - self.ranges[self.active_step])
+        #print( f"{self.res_rng} {self.resolution[self.active_step]} {self.ranges[self.active_step+1]} - {self.ranges[self.active_step]}")
+        self.step_started = datetime.now( timezone.utc)
+        self.last_tic = self.started
 
-    def tick( self) -> bool:
+    def tick( self, session: sqlalchemy.orm.session.Session = None) -> bool:
         assert self.active_step is not None
-        self.ticks += 1
-        #print( f"{self.ticks = } {self.active_step = } {self.steps = } {self.ranges = } {self.res_rng = } {(self.res_rng * self.ticks) % self.steps[self.active_step] }")
-        return (self.res_rng * self.ticks) % self.steps[self.active_step] < self.res_rng
-
-    def status( self):
-        percent = self.ranges[self.active_step] + int( self.res_rng * self.ticks / self.steps[self.active_step]) / self.resolution
-        span = datetime.now( timezone.utc) - self.started
-        return ( percent, self.steps[self.active_step], self.ticks, span, span / percent,)
+        self.step_ticks += 1
+        #print( f"tick   {self.step_ticks = } {self.active_step = } {self.steps = } {self.ranges = } {self.res_rng = }")
+        #print( f"    <? {(self.res_rng * self.step_ticks) % self.steps[self.active_step] }")
+        steps = self.steps[self.active_step]
+        update = ((self.res_rng * self.step_ticks) % steps) < self.res_rng
+        if update:
+            now = datetime.now( timezone.utc)
+            self.step_percent = int( self.res_rng * self.step_ticks / steps) / self.resolution[self.active_step]
+            self.percent = self.ranges[self.active_step] + self.step_percent
+            self.update_tic_time = now - self.last_tic
+            self.step_dur = now - self.step_started
+            self.duration = now - self.started
+            self.one_perc_duration = self.step_dur / self.step_percent
+            self.eta_dur = (100 - self.percent) * self.one_perc_duration
+            self.eta = now + self.eta_dur
+            self.last_tic = now
+            if session and update:
+                session.execute( sqlalchemy.update(self.table).values({
+                    self.columns[self.active_step]: self.percent,
+                    'expected_at': self.eta,
+                }).where(self.table.id==self.action_id))
+                session.commit()
+        return update
 
     def status_msg( self):
-        percent = self.ranges[self.active_step] + int( self.res_rng * self.ticks / self.steps[self.active_step]) / self.resolution
-        span = datetime.now( timezone.utc) - self.started
-        return f"{percent} {self.steps[self.active_step]} {self.ticks} {span} {span / percent}"
+        return f"{self.percent} {self.steps[self.active_step]} {self.step_ticks} spent:{self.duration} tic dur:{self.update_tic_time} perc_dur:{self.one_perc_duration} ETA_dur:{self.eta_dur} ETA:{self.eta.time()}"
 
 

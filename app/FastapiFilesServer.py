@@ -7,8 +7,9 @@ import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
 from alchemyModelFiles import Base, T_Hosts, Host, PutHost, T_Actions, Action, PutAction, T_Ignores, Ignore, PutIgnore, T_Folders, Folder, T_Files, File
 from alchemyFilesDB import FilesDB
+from enum import Enum
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi_utilities import repeat_every
 from fastapi_pagination import Page, add_pagination #, paginate
 from fastapi_pagination.ext.sqlalchemy import paginate # as pag
@@ -53,9 +54,9 @@ def check_for_pending_actions() -> None:
         host_subtree = file_db.container_to_host_path( container_subtree_to_check)
         stmt = sqlalchemy.select( sqlalchemy.func.count()).select_from( T_Folders).where( T_Folders.host_id==file_db.host_id, T_Folders.path.startswith(host_subtree), T_Folders.deleted_at==None)
         folder_cnt = max( 1, session.scalar( stmt))
-    progress = Progress( resolution=10, ranges=[ 0, 100],  counts=[ folder_cnt,])
+    progress = Progress( T_Actions, 'for_removed_progress', scan_action.id, steps=folder_cnt, resolution=1)
     if scan_action.for_removed and scan_action.for_new_or_updated:
-        progress = Progress( resolution=10, ranges=[ 0, 5, 100], counts=[ folder_cnt, folder_cnt,])
+        progress.add_task( 'for_new_or_updated_progress', ranges=98, resolution=10)
     if scan_action.for_removed:
         progress.start_next()
         folder_cnt = check_for_removed_items( file_db, container_subtree_to_check, progress)
@@ -92,7 +93,46 @@ file_db_prod = FilesDB( curr_hostname, host_fs, mariadb_conn, 'db_files_prod')
 file_db = FilesDB( curr_hostname, host_fs, mariadb_conn, 'db_files_dev')
 
 
-@app.get("/dev/ignores/cleanup")
+class SortOrder(str, Enum):
+    asc = "asc"
+    desc = "desc"
+
+class SortIgnoreField(str, Enum):
+    host_id = "host_id"
+    path_pattern = "path_pattern"
+    created_at = "created_at"
+    updated_at = "updated_at"
+
+class SortActionField(str, Enum):
+    host_id = "host_id"
+    subtree = "subtree"
+    started_at = "started_at"
+    created_at = "created_at"
+    updated_at = "updated_at"
+    deleted_at = "deleted_at"
+
+class SortFolderField(str, Enum):
+    host_id = "host_id"
+    parent_id = "parent_id"
+    path = "path"
+    path_hash = "path_hash"
+    depth = "depth"
+    created_at = "created_at"
+    updated_at = "updated_at"
+    deleted_at = "deleted_at"
+
+class SortFileField(str, Enum):
+    folder_id = "folder_id"
+    file_name = "file_name"
+    length = "length"
+    ctime_ns = "ctime_ns"
+    mtime_ns = "mtime_ns"
+    file_hash = "file_hash"
+    created_at = "created_at"
+    updated_at = "updated_at"
+    deleted_at = "deleted_at"
+
+@app.get("/dev/curr_host/ignores/cleanup")
 def dev_clean_up_ignored() -> None:
     with file_db.Session() as session:
         _clean_up_ignored( session, file_db.host_id, file_db.curr_ignores)
@@ -306,13 +346,6 @@ def post_ignore(ignore: PutIgnore) -> Optional[int]:
         _clean_up_ignored( session, ignore.host_id, (ignore.path_pattern,))
     if file_db.host_id == host_id:
         file_db.curr_add_ignore( path_pattern)
-    #stmt = sqlalchemy.insert(T_Ignores).values( host_id=host_id, path_pattern=path_pattern)
-    #with file_db.engine.connect() as conn:
-        #results = conn.execute( stmt)
-        #assert len(results.inserted_primary_key) == 1
-        #conn.commit()
-        #cnt = results.inserted_primary_key[0]
-    #ret cnt
 
 @app.post("/v1/curr_host/scan")
 def post_host_item_scan( scan_action: PutAction) -> Optional[int]:
@@ -330,22 +363,40 @@ def get_hosts() -> Page[Host]:
         return paginate( session, sqlalchemy.select( T_Hosts).order_by( T_Hosts.id))
 
 @app.get("/v1/actions")
-def get_actions() -> Page[Action]:
+def get_actions(sort_by: SortActionField = Query(SortActionField.started_at), sort_order: SortOrder = Query(SortOrder.asc),) -> Page[Action]:
+    query = sqlalchemy.select( T_Actions)
+    sort_column = getattr(T_Actions, sort_by.value)
+    if sort_order == SortOrder.desc:
+        query = query.order_by( sqlalchemy.desc(sort_column))
+    else:
+        query = query.order_by( sqlalchemy.asc(sort_column))
     with file_db.Session() as session:
-        return paginate( session, sqlalchemy.select( T_Actions).order_by( T_Actions.host_id, T_Actions.updated_at))
+        return paginate( session, query.order_by( T_Actions.host_id, T_Actions.updated_at))
 
 @app.get("/v1/ignores")
-def get_ignores() -> Page[Ignore]:
+def get_ignores(sort_by: SortIgnoreField = Query(SortIgnoreField.path_pattern), sort_order: SortOrder = Query(SortOrder.asc),) -> Page[Ignore]:
+    query = sqlalchemy.select( T_Ignores)
+    sort_column = getattr(T_Ignores, sort_by.value)
+    if sort_order == SortOrder.desc:
+        query = query.order_by( sqlalchemy.desc(sort_column))
+    else:
+        query = query.order_by( sqlalchemy.asc(sort_column))
     with file_db.Session() as session:
-        return paginate( session, sqlalchemy.select( T_Ignores).order_by( T_Ignores.host_id, T_Ignores.path_pattern))
+        return paginate( session, query.order_by( T_Ignores.Path_pattern, T_Ignores.updated_at))
 
 @app.get("/v1/folders")
-def get_folders() -> Page[Folder]:
+def get_folders( sort_by: SortFolderField = Query(SortFolderField.path), sort_order: SortOrder = Query(SortOrder.asc),) -> Page[Folder]:
+    query = sqlalchemy.select( T_Folders)
+    sort_column = getattr(T_Folders, sort_by.value)
+    if sort_order == SortOrder.desc:
+        query = query.order_by( sqlalchemy.desc(sort_column))
+    else:
+        query = query.order_by( sqlalchemy.asc(sort_column))
     with file_db.Session() as session:
-        return paginate( session, sqlalchemy.select( T_Folders).order_by( T_Folders.host_id, T_Folders.path))
+        return paginate( session, query.order_by( T_Folders.host_id, T_Folders.path))
 
 @app.get("/v1/files")
-def get_files() -> Page[File]:
+def get_files(sort_by: SortFileField = Query(SortFileField.file_name), sort_order: SortOrder = Query(SortOrder.asc),) -> Page[File]:
     with file_db.Session() as session:
         return paginate( session, sqlalchemy.select( T_Files).order_by( T_Files.length))
 
@@ -385,9 +436,15 @@ def get_host_ignores(host_id: int) -> Page[Ignore]:
         return paginate( session, sqlalchemy.select( T_Ignores).where(T_Ignores.host_id==host_id).order_by( T_Ignores.path_pattern))
 
 @app.get("/v1/hosts/{host_id}/folders")
-def get_host_folders(host_id: int) -> Page[Folder]:
+def get_host_folders( host_id: int, sort_by: SortFolderField = Query(SortFolderField.path), sort_order: SortOrder = Query(SortOrder.asc),) -> Page[Folder]:
+    query = sqlalchemy.select( T_Folders).where(T_Folders.host_id==host_id)
+    sort_column = getattr(T_Folders, sort_by.value)
+    if sort_order == SortOrder.desc:
+        query = query.order_by( sqlalchemy.desc(sort_column))
+    else:
+        query = query.order_by( sqlalchemy.asc(sort_column))
     with file_db.Session() as session:
-        return paginate( session, sqlalchemy.select( T_Folders).where(T_Folders.host_id==host_id).order_by( T_Folders.path))
+        return paginate( session, query.order_by( T_Folders.path))
 
 @app.get("/v1/hosts/{host_id}/folders/path_list")
 def get_host_folders(host_id: int) -> Page[str]:
@@ -500,8 +557,12 @@ def check_for_removed_items( db, container_subtree_to_check: str, progress: Prog
                     print( f"check_for_removed_items: delete_folder not isdir {folder.id} {container_folder_path}")
                     folder.deleted_at=datetime.now( tz=timezone.utc)
                     session.commit()
-                if progress.tick():
+                if progress.tick( session):
                     print( progress.status_msg())
+                    # results = session.execute( sqlalchemy.update(T_Actions).values( { 'for_new_or_updated_progress': progress.percent()}).where(T_Actions.id==action_id))
+                    #print(sqlalchemy.update(progress.table).values({ progress.column(): progress.percent()}).where( progress.table.id==progress.action_id))
+                    #results = session.execute( sqlalchemy.update(progress.table).values( { progress.column(): progress.percent()}).where( progress.table.id==progress.action_id))
+                    #results = session.execute( progress.stmt())
             #else:
                 #print( f"Skip {container_folder_path = } {folder.id = } not part of {container_subtree_to_check = }")
         session.commit()
@@ -566,6 +627,7 @@ def check_for_new_or_updated_items( db, container_subtree_to_check: str, sha: bo
                                 print( f"check_for_new_or_updated_items: {host_folder_ / file_name} CHANGED")
                                 file.deleted_at = datetime.now( timezone.utc)
                                 session.commit()
+                                file_hash = None
                                 if sha:
                                     file_hash = db.file_hash( file_path_)
                                 file = db.s_create_file( session, folder.id, file_name, file_stat, file_hash)
@@ -587,8 +649,13 @@ def check_for_new_or_updated_items( db, container_subtree_to_check: str, sha: bo
                 else:
                     if not file_path_.is_symlink():
                         print( f"IS NOT file NOR link {file_path_}")
-        if progress.tick():
+        if progress.tick( session):
              print( progress.status_msg())
+             #results = session.execute( progress.stmt())
+             #results = session.execute( sqlalchemy.update(T_Actions).values( { 'for_new_or_updated_progress': progress.percent()}).where(T_Actions.id==action_id))
+             if sha:
+                 results = session.execute( sqlalchemy.update(T_Actions).values( { 'add_missing_sha_progress': progress.percent()}).where(T_Actions.id==action_id))
+             session.commit()
         #temp = progr['res'] * progr['rng'] * folder_progr
         #cond = temp % progr['cnt'] < (progr['res'] * progr['rng'])
         #if cond:
@@ -608,7 +675,8 @@ def get_next_pending_action() -> Optional[Action]:
                 #print( f"get_next_pending_action() None")
                 return None
             action_row = results[0]
-            results = conn.execute( sqlalchemy.update(T_Actions).values( { 'started_at': datetime.now()})
+            print( 'started_at', datetime.now( tz=timezone.utc))
+            results = conn.execute( sqlalchemy.update(T_Actions).values( { 'started_at': datetime.now( tz=timezone.utc)})
                            .where( T_Actions.id==action_row.id, T_Actions.host_id==file_db.host_id, T_Actions.started_at==None, T_Actions.deleted_at==None))
             if results.rowcount == 1:
                 conn.commit()
