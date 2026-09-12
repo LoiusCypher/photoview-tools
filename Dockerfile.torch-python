@@ -3,8 +3,8 @@ ARG BASE=python:3.13-trixie
 # requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
 FROM ${BASE} AS retinarcnn-python-base
 
-RUN apt update && apt upgrade -y && apt install -y qtwayland5 xdg-utils dbus-x11 libxcb-cursor0 libxcb-glx0 libgl1-mesa-dev
-RUN apt install -y git mariadb-client gcc mariadb-connector-c # -devel python3-devel 
+RUN apt update && apt upgrade -y
+RUN apt install -y git mariadb-client libmariadb3 libmariadb-dev gcc # mariadb-connector-c # -devel python3-devel 
 RUN pip3 install --upgrade pip
 
 #    && dnf install -y mysql-selinux \
@@ -14,6 +14,8 @@ RUN pip3 install --upgrade pip
 WORKDIR /app
 
 FROM retinarcnn-python-base AS filescanner
+
+RUN apt update && apt upgrade -y && apt install -y qtwayland5 xdg-utils dbus-x11 libxcb-cursor0 libxcb-glx0 libgl1-mesa-dev
 
 COPY app/FastapiFilesServer.py app/alchemyFilesDB.py app/alchemyModelFiles.py app/progress.py app/requirements-scanner.txt /app/
 RUN pip3 install -r requirements-scanner.txt
