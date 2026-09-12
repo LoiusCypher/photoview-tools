@@ -4,7 +4,7 @@ ARG BASE=python:3.13-trixie
 FROM ${BASE} AS retinarcnn-python-base
 
 RUN apt update && apt upgrade -y
-RUN apt install -y git mariadb-client libmariadb3 libmariadb-dev gcc # mariadb-connector-c # -devel python3-devel 
+RUN apt install -y git mariadb-client python3-mariadb-connector # libmariadb3 libmariadb-dev gcc # mariadb-connector-c # -devel python3-devel 
 RUN pip3 install --upgrade pip
 
 #    && dnf install -y mysql-selinux \
