@@ -9,30 +9,32 @@ RUN pip3 install --upgrade pip
 
 #    && dnf install -y mysql-selinux \
 
-RUN git clone https://github.com/LoiusCypher/Mask-RCNN_TF2.14.0.git /Mask-RCNN_model
-
-RUN sed -i -e "s:np\.bool:bool:g" /Mask-RCNN_model/mrcnn/utils.py
 #COPY app /app
 #COPY labelme /app/labelme
-COPY app/FastapiFilesServer.py app/alchemyFilesDB.py app/alchemyModelFiles.py app/progress.py app/requirements-scanner.txt /app/
 WORKDIR /app
 
 FROM retinarcnn-python-base AS filescanner
+
+COPY app/FastapiFilesServer.py app/alchemyFilesDB.py app/alchemyModelFiles.py app/progress.py app/requirements-scanner.txt /app/
 RUN pip3 install -r requirements-scanner.txt
 
-FROM retinarcnn-python-base AS retinarcnn-python
-
-COPY app /app
-COPY labelme /app/labelme
-
-RUN pip3 install -r requirements.txt
-RUN pip3 install "labelme>=7.0.4" labelme2coco
-
-ENV XDG_RUNTIME_DIR=/tmp/runtime-root
-ENV XDG_SESSION_TYPE=wayland
-ENV WAYLAND_DISPLAY=wayland-0
-ENV QT_WAYLAND_SHELL_INTEGRATION=xdg-shell
-ENV QT_QPA_PLATFORM=wayland
-
-RUN mkdir -p $XDG_RUNTIME_DIR
+#FROM retinarcnn-python-base AS retinarcnn-python
+#
+#RUN git clone https://github.com/LoiusCypher/Mask-RCNN_TF2.14.0.git /Mask-RCNN_model
+#
+#RUN sed -i -e "s:np\.bool:bool:g" /Mask-RCNN_model/mrcnn/utils.py
+#
+#COPY app /app
+#COPY labelme /app/labelme
+#
+#RUN pip3 install -r requirements.txt
+#RUN pip3 install "labelme>=7.0.4" labelme2coco
+#
+#ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+#ENV XDG_SESSION_TYPE=wayland
+#ENV WAYLAND_DISPLAY=wayland-0
+#ENV QT_WAYLAND_SHELL_INTEGRATION=xdg-shell
+#ENV QT_QPA_PLATFORM=wayland
+#
+#RUN mkdir -p $XDG_RUNTIME_DIR
 
