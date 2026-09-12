@@ -1,10 +1,9 @@
-#ARG BASE=python:3.12-trixie
-ARG BASE=python:3.14-trixie
+ARG BASE=python:3.12-trixie
 # requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
 FROM ${BASE} AS retinarcnn-python-base
 
 RUN apt update && apt upgrade -y
-RUN apt install -y git mariadb-client python3-mariadb-connector libmariadb-dev-compat libmariadb3 # libmariadb-dev gcc mariadb-connector-c-devel python3-devel 
+RUN apt install -y git mariadb-client # python3-mariadb-connector libmariadb-dev-compat libmariadb3 # libmariadb-dev gcc mariadb-connector-c-devel python3-devel 
 RUN pip3 install --upgrade pip
 
 #    && dnf install -y mysql-selinux \
