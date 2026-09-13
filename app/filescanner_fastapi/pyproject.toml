@@ -51,8 +51,8 @@ akk_dev = [
     "uv>=0.12.6",
 ]
 
-#[tool.fastapi]
-#entrypoint = "src.main:app"
+[tool.fastapi]
+entrypoint = "app.main:app"
 
 [tool.alembic]
 # path to migration scripts

@@ -1,14 +1,12 @@
 services:
+
   filescanner:
-    image: photoview-tools/filescanner
+    image: ghcr.io/loiuscypher/photoview-tools:main
     build:
       context: .
       dockerfile: Dockerfile.filescanner
       target: filescanner
-    #command: uv run fastapi dev --host 0.0.0.0 --port 8080 ./FastapiFilesServer.py
-    command: bash -c 'cd filescanner_fastapi && uv run fastapi dev --host 0.0.0.0 --port 8080' # ./main.py
-    #command: uv run --package filescanner_fastapi fastapi dev --host 0.0.0.0 --port 8080 # packages/filescanner_fastapi/src/main.py
-    #command: uv run --package filescanner_fastapi pwd
+    command: uv run --directory filescanner_fastapi fastapi run --host 0.0.0.0 --port 8080
     privileged: true
     hostname: filescanner
     container_name: filescanner
@@ -20,10 +18,8 @@ services:
     environment:
       CURR_HOSTNAME: "${HOSTNAME}"
       MARIADB_CONN: "${MARIADB_USER}:${MARIADB_PASSWORD}@192.168.2.227:3306"
-      #XDG_RUNTIME_DIR: "/tmp/Wayland-runtime-root"
-      #WAYLAND_DISPLAY: "wayland-0"
     volumes:
-      - "/home/helmut/docker/photoview-tools/app:/app:z"
+#      - "/home/helmut/docker/photoview-tools/app:/app:z"
       #- "/run/user/1000:$XDG_RUNTIME_DIR:z"
       #- "/run/user/1000/$WAYLAND_DISPLAY:/tmp/Wayland-runtime-root/$WAYLAND_DISPLAY:rw"
 #      - "/run/user/1000/wayland-0:/tmp/runtime-root/wayland-0:rw,z"
@@ -40,4 +36,12 @@ services:
 #      - "./handwriting/generated:/handwriting/generated:rw"
 #      - "/home/helmut/Downloads/LAV:/app/LAV:rw"
       - "/:/host_fs:ro,z"
+
+  filescanner_dev:
+    extends: filescanner
+    image: photoview-tools/filescanner
+    volumes:
+      - "/home/helmut/docker/photoview-tools/app:/app:z"
+    profiles: [dev]
+    command: uv run --directory filescanner_fastapi fastapi dev --host 0.0.0.0 --port 8080
 
