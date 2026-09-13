@@ -1,7 +1,6 @@
 ARG PYTHON=3.12
-ARG BASE=python:${PYTHON}-trixie
 # requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
-FROM ${BASE} AS retinarcnn-python-base
+FROM python:${PYTHON}-trixie AS retinarcnn-python-base
 
 RUN apt update && apt upgrade -y
 RUN apt install -y git mariadb-client # python3-mariadb-connector libmariadb-dev-compat libmariadb3 # libmariadb-dev gcc mariadb-connector-c-devel python3-devel 
