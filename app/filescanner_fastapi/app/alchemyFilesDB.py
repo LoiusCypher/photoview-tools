@@ -9,7 +9,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import INET4, INET6
 from typing import List, Optional, Union
 from pydantic import BaseModel, StrictInt, Field
-from alchemyModelFiles import Base, T_Hosts, Host, PutHost, T_Ignores, Ignore, PutIgnore, T_Actions, Action, PutAction, T_Folders, Folder, T_Files, File
+from app.alchemyModelFiles import Base, T_Hosts, Host, PutHost, T_Ignores, Ignore, PutIgnore, T_Actions, Action, PutAction, T_Folders, Folder, T_Files, File
 
 
 class FilesDBBase( object):

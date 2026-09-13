@@ -1,0 +1,58 @@
+ARG PYTHON=3.12
+ARG BASE=python:$(PYTHON)-trixie
+# requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
+FROM ${BASE} AS retinarcnn-python-base
+
+RUN apt update && apt upgrade -y
+RUN apt install -y git mariadb-client # python3-mariadb-connector libmariadb-dev-compat libmariadb3 # libmariadb-dev gcc mariadb-connector-c-devel python3-devel 
+RUN pip3 install --upgrade pip
+
+#    && dnf install -y mysql-selinux \
+
+#COPY app /app
+#COPY labelme /app/labelme
+WORKDIR /app
+
+FROM retinarcnn-python-base AS filescanner
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Suppress progress bars in build logs
+ENV UV_NO_PROGRESS=1
+# Compile Python bytecode for faster startup
+ENV UV_COMPILE_BYTECODE=1
+# Recommended when using cache mounts
+ENV UV_LINK_MODE=copy
+# Pin the Python version uv should use
+ENV UV_PYTHON=$(PYTHON)
+
+COPY pyproject.toml uv.lock /app/
+#RUN uv sync --frozen --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project
+
+COPY app/FastapiFilesServer.py app/alchemyFilesDB.py app/alchemyModelFiles.py app/progress.py /app/
+RUN uv sync --frozen
+
+CMD ["uv", "run", "python", "-m", "myapp"]
+
+#FROM retinarcnn-python-base AS retinarcnn-python
+#
+#RUN apt update && apt upgrade -y && apt install -y qtwayland5 xdg-utils dbus-x11 libxcb-cursor0 libxcb-glx0 libgl1-mesa-dev
+#RUN git clone https://github.com/LoiusCypher/Mask-RCNN_TF2.14.0.git /Mask-RCNN_model
+#
+#RUN sed -i -e "s:np\.bool:bool:g" /Mask-RCNN_model/mrcnn/utils.py
+#
+#COPY app /app
+#COPY labelme /app/labelme
+#
+#RUN pip3 install -r requirements.txt
+#RUN pip3 install "labelme>=7.0.4" labelme2coco
+#
+#ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+#ENV XDG_SESSION_TYPE=wayland
+#ENV WAYLAND_DISPLAY=wayland-0
+#ENV QT_WAYLAND_SHELL_INTEGRATION=xdg-shell
+#ENV QT_QPA_PLATFORM=wayland
+#
+#RUN mkdir -p $XDG_RUNTIME_DIR
+

@@ -1,0 +1,31 @@
+[project]
+name = "app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["filescanner_fastapi"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+#filescanner_fastapi = { workspace = true }
+filescanner-fastapi = { path = "filescanner_fastapi/" }
+
+#[tool.uv.workspace]
+#members = ["packages/*"]
+##exclude = ["packages/seeds"]
+
+[dependency-groups]
+dev = [
+#    "pytest",
+#    "ruff",
+]
+
+#[project.scripts]
+#app = "app:main"
+
+[build-system]
+requires = ["uv_build>=0.12.7,<0.13.0"]
+build-backend = "uv_build"

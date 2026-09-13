@@ -3,9 +3,12 @@ services:
     image: photoview-tools/filescanner
     build:
       context: .
-      dockerfile: Dockerfile.torch-python
+      dockerfile: Dockerfile.filescanner
       target: filescanner
-    command: uv run fastapi dev --host 0.0.0.0 --port 8080 ./FastapiFilesServer.py
+    #command: uv run fastapi dev --host 0.0.0.0 --port 8080 ./FastapiFilesServer.py
+    command: bash -c 'cd filescanner_fastapi && uv run fastapi dev --host 0.0.0.0 --port 8080' # ./main.py
+    #command: uv run --package filescanner_fastapi fastapi dev --host 0.0.0.0 --port 8080 # packages/filescanner_fastapi/src/main.py
+    #command: uv run --package filescanner_fastapi pwd
     privileged: true
     hostname: filescanner
     container_name: filescanner
