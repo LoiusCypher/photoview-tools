@@ -27,12 +27,13 @@ ENV UV_PYTHON=${PYTHON}
 
 COPY app/filescanner_fastapi/pyproject.toml app/filescanner_fastapi/uv.lock /app/filescanner_fastapi/
 #RUN uv sync --frozen --no-install-project
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project --directory filescanner_fastapi
 
 COPY app/filescanner_fastapi/app/main.py app/filescanner_fastapi/app/alchemyFilesDB.py app/filescanner_fastapi/app/alchemyModelFiles.py app/filescanner_fastapi/app/progress.py app/filescanner_fastapi/app/__init__.py /app/filescanner_fastapi/app/
-RUN uv sync --frozen
+RUN uv sync --frozen --directory filescanner_fastapi
 
-CMD ["uv", "run", "python", "-m", "myapp"]
+#CMD ["uv", "run", "python", "-m", "myapp", "--directory", "filescanner_fastapi"]
+CMD ["uv", "run", "--directory", "filescanner_fastapi", "fastapi", "dev", "--host", "0.0.0.0", "--port", "8080" ] # packages/filescanner_fastapi/src/main.py
 
 #FROM retinarcnn-python-base AS retinarcnn-python
 #
