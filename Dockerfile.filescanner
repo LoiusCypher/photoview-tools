@@ -29,7 +29,7 @@ COPY app/filescanner_fastapi/pyproject.toml app/filescanner_fastapi/uv.lock /app
 #RUN uv sync --frozen --no-install-project
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project
 
-COPY app/filescanner_fastapi/app/FastapiFilesServer.py app/filescanner_fastapi/app/alchemyFilesDB.py app/filescanner_fastapi/app/alchemyModelFiles.py app/filescanner_fastapi/app/progress.py app/filescanner_fastapi/app/__init__.py /app/filescanner_fastapi/app/
+COPY app/filescanner_fastapi/app/main.py app/filescanner_fastapi/app/alchemyFilesDB.py app/filescanner_fastapi/app/alchemyModelFiles.py app/filescanner_fastapi/app/progress.py app/filescanner_fastapi/app/__init__.py /app/filescanner_fastapi/app/
 RUN uv sync --frozen
 
 CMD ["uv", "run", "python", "-m", "myapp"]
