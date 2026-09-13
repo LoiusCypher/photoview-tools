@@ -33,7 +33,7 @@ COPY app/filescanner_fastapi/app/main.py app/filescanner_fastapi/app/alchemyFile
 RUN uv sync --frozen --directory filescanner_fastapi
 
 #CMD ["uv", "run", "python", "-m", "myapp", "--directory", "filescanner_fastapi"]
-CMD ["uv", "run", "--directory", "filescanner_fastapi", "fastapi", "dev", "--host", "0.0.0.0", "--port", "8080" ] # packages/filescanner_fastapi/src/main.py
+CMD ["uv", "run", "--directory", "filescanner_fastapi", "fastapi", "dev", "--host", "0.0.0.0", "--port", "8080"] # packages/filescanner_fastapi/src/main.py
 
 #FROM retinarcnn-python-base AS retinarcnn-python
 #
