@@ -25,11 +25,11 @@ ENV UV_LINK_MODE=copy
 # Pin the Python version uv should use
 ENV UV_PYTHON=${PYTHON}
 
-COPY pyproject.toml uv.lock /app/
+COPY app/filescanner_fastapi/pyproject.toml app/filescanner_fastapi/uv.lock /app/
 #RUN uv sync --frozen --no-install-project
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project
 
-COPY app/FastapiFilesServer.py app/alchemyFilesDB.py app/alchemyModelFiles.py app/progress.py /app/
+COPY app/filescanner_fastapi/FastapiFilesServer.py app/filescanner_fastapi/alchemyFilesDB.py app/filescanner_fastapi/alchemyModelFiles.py app/filescanner_fastapi/progress.py /app/
 RUN uv sync --frozen
 
 CMD ["uv", "run", "python", "-m", "myapp"]
