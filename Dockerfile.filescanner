@@ -1,5 +1,5 @@
 ARG PYTHON=3.12
-ARG BASE=python:$(PYTHON)-trixie
+ARG BASE=python:${PYTHON}-trixie
 # requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
 FROM ${BASE} AS retinarcnn-python-base
 
@@ -24,7 +24,7 @@ ENV UV_COMPILE_BYTECODE=1
 # Recommended when using cache mounts
 ENV UV_LINK_MODE=copy
 # Pin the Python version uv should use
-ENV UV_PYTHON=$(PYTHON)
+ENV UV_PYTHON=${PYTHON}
 
 COPY pyproject.toml uv.lock /app/
 #RUN uv sync --frozen --no-install-project
