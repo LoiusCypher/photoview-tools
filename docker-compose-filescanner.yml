@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile.filescanner
       target: filescanner
-    command: uv run --directory filescanner_fastapi fastapi run --host 0.0.0.0 --port 8080
+    command: uv run --no-dev --directory filescanner_fastapi fastapi run --host 0.0.0.0 --port 8080
     privileged: true
     hostname: filescanner
     container_name: filescanner

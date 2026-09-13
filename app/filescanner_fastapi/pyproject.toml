@@ -51,6 +51,9 @@ akk_dev = [
     "uv>=0.12.6",
 ]
 
+[tool.uv]
+default-groups = []
+
 [tool.fastapi]
 entrypoint = "app.main:app"
 

@@ -2,6 +2,8 @@ ARG PYTHON=3.12
 # requirements.txt failed for mariadb # ARG BASE=python:3.14-trixie
 FROM python:${PYTHON}-trixie AS retinarcnn-python-base
 
+ARG PYTHON # inherit value from global scope
+
 RUN apt update && apt upgrade -y
 RUN apt install -y git mariadb-client # python3-mariadb-connector libmariadb-dev-compat libmariadb3 # libmariadb-dev gcc mariadb-connector-c-devel python3-devel 
 RUN pip3 install --upgrade pip
@@ -23,17 +25,16 @@ ENV UV_COMPILE_BYTECODE=1
 # Recommended when using cache mounts
 ENV UV_LINK_MODE=copy
 # Pin the Python version uv should use
-ENV UV_PYTHON=${PYTHON}
+ENV UV_PYTHON=$PYTHON
 
 COPY app/filescanner_fastapi/pyproject.toml app/filescanner_fastapi/uv.lock /app/filescanner_fastapi/
-#RUN uv sync --frozen --no-install-project
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project --directory filescanner_fastapi
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project --directory filescanner_fastapi --no-dev
 
-COPY app/filescanner_fastapi/app/main.py app/filescanner_fastapi/app/alchemyFilesDB.py app/filescanner_fastapi/app/alchemyModelFiles.py app/filescanner_fastapi/app/progress.py app/filescanner_fastapi/app/__init__.py /app/filescanner_fastapi/app/
-RUN uv sync --frozen --directory filescanner_fastapi
+COPY app/filescanner_fastapi/app/* /app/filescanner_fastapi/app/
+RUN uv sync --frozen --directory filescanner_fastapi --no-dev
 
 #CMD ["uv", "run", "python", "-m", "myapp", "--directory", "filescanner_fastapi"]
-CMD ["uv", "run", "--directory", "filescanner_fastapi", "fastapi", "dev", "--host", "0.0.0.0", "--port", "8080"] # packages/filescanner_fastapi/src/main.py
+CMD ["uv", "run", "--directory", "filescanner_fastapi", "fastapi", "dev", "--host", "0.0.0.0", "--port", "8080", ]
 
 #FROM retinarcnn-python-base AS retinarcnn-python
 #
