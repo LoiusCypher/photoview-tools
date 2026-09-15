@@ -73,6 +73,7 @@ class FilesDB( FilesDBBase):
         super().__init__( mariadb_conn, db_name)
         Base.metadata.create_all( self.engine)
         self.root_in_container = root_in_container
+        self.root_in_container_path = pathlib.Path( root_in_container)
         #set_curr_host( "test3")
         set_curr_host( host_name)
         with self.Session() as session:
@@ -86,23 +87,30 @@ class FilesDB( FilesDBBase):
     def curr_add_ignore( self, pattern: str) -> None:
         self.curr_ignores.append( pattern)
 
-    def is_container_path( self, path: str) -> bool:
-        return os.path.abspath( path).startswith( self.root_in_container)
+    def is_container_path( self, path: pathlib.Path) -> bool:
+        return self.root_in_container_path in path.absolute().parents
 
-    def host_to_container_path( self, host_path: str) -> str:
-        host_abs_path = os.path.abspath( host_path)
+    #def host_to_container_os_path( self, host_path: str) -> str:
+        #host_abs_path = os.path.abspath( host_path)
+        ##print( f"host_to_container_path: {host_path = } {host_abs_path = }")
+        ##print( f"host_to_container_path: {os.path.relpath( host_abs_path, '/') = }")
+        #container_path = os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( host_abs_path, '/')))
+        #return container_path
+
+    def host_to_container_path( self, host_path: str) -> pathlib.Path:
+        host_abs_path = pathlib.Path( host_path).absolute()
         #print( f"host_to_container_path: {host_path = } {host_abs_path = }")
-        #print( f"host_to_container_path: {os.path.relpath( host_abs_path, '/') = }")
-        container_path = os.path.abspath( os.path.join( self.root_in_container, os.path.relpath( host_abs_path, '/')))
+        #print( f"host_to_container_path: {host_abs_path.relative_to( host_abs_path.root) = }")
+        container_path = (self.root_in_container_path / host_abs_path.relative_to( host_abs_path.root)).absolute()
         return container_path
 
-    def container_to_host_path( self, container_path: str) -> str:
-        container_abs_path = os.path.abspath( container_path)
-        host_path = os.path.abspath( os.path.join( '/', os.path.relpath( container_abs_path, self.root_in_container)))
-        return host_path
+    #def container_to_host( self, container_path: str) -> str:
+        #container_abs_path = os.path.abspath( container_path)
+        #host_path = os.path.abspath( os.path.join( '/', os.path.relpath( container_abs_path, self.root_in_container)))
+        #return host_path
 
-    def container_to_host_path_( self, container_path: pathlib.Path) -> pathlib.Path:
-        return ( container_path.root / container_path.absolute().relative_to( self.root_in_container)).absolute()
+    def container_to_host_path( self, container_path: pathlib.Path) -> pathlib.Path:
+        return (container_path.root / container_path.absolute().relative_to( self.root_in_container_path)).absolute()
 
     def fix_folder_depth( self) -> None:
         #print( f"db_fix_folder_depth: START")
@@ -148,7 +156,7 @@ class FilesDB( FilesDBBase):
         stmt = sqlalchemy.select( T_Folders).where( T_Folders.host_id==host_id, T_Folders.path_hash==folder_hash, T_Folders.deleted_at==None)
         return session.scalar( stmt)
 
-    def s_get_undeleted_folders( self, session, host_id: int, startswith: Optional[str] =None, reverse: bool =False) -> List[T_Folders]:
+    def s_get_undeleted_folders( self, session, host_id: int, startswith: Optional[str], reverse: bool =False) -> List[T_Folders]:
         print( f"s_get_undeleted_folders: {host_id}")
         stmt = sqlalchemy.select( T_Folders).where( T_Folders.host_id==host_id, T_Folders.deleted_at==None)
         if startswith is not None:
@@ -177,16 +185,21 @@ class FilesDB( FilesDBBase):
         session.commit()
         return folder
 
-    def s_create_file( self, session, folder_id: int, file_name: str, file_stat, file_hash: str) -> T_Files:
-        #print( f"s_create_file: {folder_id} {file_name} {file_stat} {file_hash}")
+    def create_file( self, folder_id: int, file_name: str, file_stat, file_hash: str) -> T_Files:
+        #print( f"create_file: {folder_id} {file_name} {file_stat} {file_hash}")
         file = T_Files( folder_id = folder_id, file_name = file_name, length = file_stat.st_size,
                         ctime_ns = file_stat.st_ctime_ns, mtime_ns = file_stat.st_mtime_ns,
                         ctime = datetime.fromtimestamp( file_stat.st_ctime_ns / 1e9, tz=timezone.utc),
                         mtime = datetime.fromtimestamp( file_stat.st_mtime_ns / 1e9, tz=timezone.utc),
                         file_hash = file_hash)
-        session.add( file)
-        session.commit()
         return file
+
+    #def s_create_file( self, session, folder_id: int, file_name: str, file_stat, file_hash: str) -> T_Files:
+        ##print( f"s_create_file: {folder_id} {file_name} {file_stat} {file_hash}")
+        #file = self.create_file( folder_id, file_name, file_stat, file_hash)
+        #session.add( file)
+        #session.commit()
+        #return file
 
     def curr_path_is_ignored( self, path: str) -> bool:
         #print( f"curr_path_is_ignored: {path = }")
@@ -210,9 +223,58 @@ class FilesDB( FilesDBBase):
                 hash.update(data)
         return hash.hexdigest()
 
+    def action_subtree_to_container_path( self, action_subtree: str) -> pathlib.Path:
+        #print( f"action_subtree_to_container: {action_subtree = }")
+        if action_subtree is None:
+            container_subtree_to_check = self.root_in_container_path
+            #print( f"1 {container_subtree_to_check = }")
+        else:
+            action_subtree_path = pathlib.Path( action_subtree)
+            if self.is_container_path( action_subtree_path):
+                container_subtree_to_check = action_subtree_path
+                print( f"2 {container_subtree_to_check = }")
+            else:
+                container_subtree_to_check = self.host_to_container_path( action_subtree_path)
+        return container_subtree_to_check
+
+    def folder_cnt( self, host_subtree_path: pathlib.Path) -> None:
+        stmt = sqlalchemy.select( sqlalchemy.func.count()).select_from( T_Folders).where( T_Folders.host_id==self.host_id, T_Folders.path.startswith(host_subtree_path), T_Folders.deleted_at==None)
+        with self.Session() as session:
+            return session.scalar( stmt)
+
     def drop_tables( self) -> None:
         T_Files.__table__.drop( self.engine)
         T_Folders.__table__.drop( self.engine)
         T_Actions.__table__.drop( self.engine)
         T_Ignores.__table__.drop( self.engine)
         T_Hosts.__table__.drop( self.engine)
+
+def _clean_up_ignored( file_db, session, host_id: int, ignores: List[str]) -> None:
+    ignore_starts = sorted( list( set( [file_db.ignored_to_startswith( ignore) for ignore in ignores])))
+    for ignore_start in ignore_starts:
+        #print( f"_clean_up_ignored: {ignore_start = } ")
+        for folder in file_db.s_get_undeleted_folders( session, host_id, ignore_start, reverse=True):
+            #print( f"{folder = } ")
+            #if self.debug: print( f"_clean_up_ignored: {host_id = } {folder.path = }")
+            if file_db.path_is_ignored( folder.path, ignores):
+                #print( f"_clean_up_ignored: {host_id = } deleting {folder.path = }")
+                #print( f"{folder.files = }")
+                #return
+                #for file_id, file_name in self.all_files( conn, folder.id):
+                    #print( f"_clean_up_ignored: {host_id = } deleting {folder.path = } {file_name = } {file_id = }")
+                    #self.delete_file_id( conn, file_id)
+                session.query( T_Folders).where( T_Folders.id==folder.id).delete()
+            #print( f"{folder.files = } ")
+            for file in folder.files:
+                #print( f"{file = } ")
+                container_file_path = pathlib.Path( folder.path, file.file_name)
+                if file.deleted_at is None and file_db.path_is_ignored( container_file_path, ignores):
+                    #print( f"{folder = } ")
+                    #print( f"{file = } ")
+                    #print( f"{file.folder = } ")
+                    #print( f"_clean_up_ignored: deleting {container_file_path = } {file.file_name = }")
+                    #file.delete()
+                    session.query( T_Files).where( T_Files.id==file.id).delete()
+        session.commit()
+    #session.commit()
+

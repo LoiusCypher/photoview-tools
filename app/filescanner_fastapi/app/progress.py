@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
+from typing import List
 import sqlalchemy
 
-class Progress( object):
+class Progress:
 
     def __init__( self, table: object, column: str, action_id: int, steps: int, resolution: int=1) -> None:
         self.table = table
@@ -14,7 +14,7 @@ class Progress( object):
         self.active_step = None
         #print( f"__init__ {self.column = } {self.action_id} {self.resolution} {self.steps} {self.ranges}")
 
-    def add_task( self, column: str, steps: Optional[int]=None, resolution: Optional[int]=None, ranges: Optional[List[int]|int]=None) -> None:
+    def add_task( self, column: str, steps: int | None =None, resolution: int | None =None, ranges: List[int] | int | None =None) -> None:
         #print( f"add_task {column = } {steps = } {resolution = } {ranges = }")
         self.columns.append( column)
         #print( f"add_task {self.columns = }")
@@ -43,7 +43,7 @@ class Progress( object):
         #print( f"start_next")
         if self.active_step is None:
             self.active_step = 0
-            self.started = datetime.now( timezone.utc)
+            self.started = datetime.now( tz=UTC)
         else:
             self.active_step += 1
         #print( f"{self.active_step} {len(self.ranges)} {self.steps}")
@@ -51,7 +51,7 @@ class Progress( object):
         self.step_ticks = 0
         self.res_rng = self.resolution[self.active_step] * (self.ranges[self.active_step+1] - self.ranges[self.active_step])
         #print( f"{self.res_rng} {self.resolution[self.active_step]} {self.ranges[self.active_step+1]} - {self.ranges[self.active_step]}")
-        self.step_started = datetime.now( timezone.utc)
+        self.step_started = datetime.now( tz=UTC)
         self.last_tic = self.started
 
     def tick( self, session: sqlalchemy.orm.session.Session = None) -> bool:
@@ -62,7 +62,7 @@ class Progress( object):
         steps = self.steps[self.active_step]
         update = ((self.res_rng * self.step_ticks) % steps) < self.res_rng
         if update:
-            now = datetime.now( timezone.utc)
+            now = datetime.now( tz=UTC)
             self.step_percent = int( self.res_rng * self.step_ticks / steps) / self.resolution[self.active_step]
             self.percent = self.ranges[self.active_step] + self.step_percent
             self.update_tic_time = now - self.last_tic

@@ -23,6 +23,7 @@ dev = [
     "h5py>=3.16.0",
     "mariadb>=1.1.14",
     #"paramiko>=5.0.0",
+    "ruff>=0.16.7",
     "sqlalchemy>=2.0.52",
     "uv>=0.12.6",
 ]
@@ -56,6 +57,11 @@ default-groups = []
 
 [tool.fastapi]
 entrypoint = "app.main:app"
+
+[tool.ruff]
+line-length=160
+
+[tool.ruff.lint]
 
 [tool.alembic]
 # path to migration scripts
