@@ -1,18 +1,17 @@
 # Module Imports
 import hashlib
-import os
 import pathlib
 import sys
 from datetime import UTC, datetime
-from typing import List
+
 import sqlalchemy
 
-from app.alchemyModelFiles import File, Folder, T_Actions
+from app.model_files import File, Folder, T_Actions
 from app.progress import Progress
 
 #from app.glue import file_db, file_db_prod
 
-def check_files_for_removes( files: List[File], container_folder_path: pathlib.Path) -> int:
+def check_files_for_removes( files: list[File], container_folder_path: pathlib.Path) -> int:
     #print( f"check_files_for_removes: {container_folder_path = } {files = }")
     dirty_cnt = 0
     for file in files:

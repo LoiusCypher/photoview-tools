@@ -1,18 +1,13 @@
-import os
-import sys
 import hashlib
-import mariadb
 import pathlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 import sqlalchemy
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.dialects.mysql import INET4, INET6
-from typing import List, Optional, Union
-from pydantic import BaseModel, StrictInt, Field
-from app.alchemyModelFiles import Base, T_Hosts, Host, PutHost, T_Ignores, Ignore, PutIgnore, T_Actions, Action, PutAction, T_Folders, Folder, T_Files, File
+
+from app.model_files import Base, File, T_Actions, T_Files, T_Folders, T_Hosts, T_Ignores
 
 
-class FilesDBBase( object):
+class FilesDBBase:
     """ A class to create and drop filesDB tables and provide a session for it """
     # Define the MariaDB engine using MariaDB Connector/Python
     #engine = sqlalchemy.create_engine("mariadb+mariadbconnector://photoview:photosecret@192.168.2.227:3306/objectdetector")
@@ -28,7 +23,7 @@ class FilesDBBase( object):
         #print( f"ignored_to_startswith: {ignore = }")
         while True:
             #print( f"ignored_to_startswith:  {not any([char in ignore for char in '*.['])}  {[char in ignore for char in '*.['] = }")
-            if not any([char in ignore for char in '*.[']):
+            if not any(char in ignore for char in '*.['):
                 #print( f"ignored_to_startswith: exit loop")
                 break
             ignore = str( pathlib.Path( ignore).parent)
@@ -36,14 +31,14 @@ class FilesDBBase( object):
         #print( f"ignored_to_startswith: exit {ignore = }")
         return ignore
 
-    def path_is_ignored( self, path: str, ignores: List[str]) -> bool:
+    def path_is_ignored( self, path: str, ignores: list[str]) -> bool:
         #print( f"path_is_ignored: {path = } {ignores = }")
         for patt in ignores:
             try:
                 if pathlib.PurePath( path).full_match( patt):
                     print( f"path_is_ignored: 1 {pathlib.PurePath( path) = } {patt = }")
                     return True
-            except:
+            except AttributeError:
                 if pathlib.PurePath( path).match( patt):
                     #print( f"path_is_ignored: 2 {pathlib.PurePath( path) = } {patt = }")
                     return True
@@ -145,7 +140,7 @@ class FilesDB( FilesDBBase):
                         print( f"db_fix_folder_depth: 5 fixed {folder.path}")
                         break
                 else:
-                    print( f"db_fix_folder_depth: fixed everything")
+                    print( "db_fix_folder_depth: fixed everything")
                     break
                 session.commit()
             #print( f"db_fix_folder_depth: LOOP")
@@ -156,7 +151,7 @@ class FilesDB( FilesDBBase):
         stmt = sqlalchemy.select( T_Folders).where( T_Folders.host_id==host_id, T_Folders.path_hash==folder_hash, T_Folders.deleted_at==None)
         return session.scalar( stmt)
 
-    def s_get_undeleted_folders( self, session, host_id: int, startswith: Optional[str], reverse: bool =False) -> List[T_Folders]:
+    def s_get_undeleted_folders( self, session, host_id: int, startswith: str | None, reverse: bool =False) -> list[T_Folders]:
         print( f"s_get_undeleted_folders: {host_id}")
         stmt = sqlalchemy.select( T_Folders).where( T_Folders.host_id==host_id, T_Folders.deleted_at==None)
         if startswith is not None:
@@ -170,7 +165,7 @@ class FilesDB( FilesDBBase):
     def s_create_folder( self, session, host_id: int, folder_path: pathlib.Path, folder_hash: str) -> T_Folders:
         #print( f"s_create_folder: {host_id} {folder_path} {folder_hash}")
         if folder_path == folder_path.root:
-            folder = T_Folders( host_id = self.host_id, parent_id = None, path = str( folder_path), path_hash = host_hash, depth = 1)
+            folder = T_Folders( host_id = self.host_id, parent_id = None, path = str( folder_path), path_hash = folder_hash, depth = 1)
             print( f"s_create_folder: root {folder_path}")
         else:
             parent_path = folder_path.parent.absolute()
@@ -189,8 +184,8 @@ class FilesDB( FilesDBBase):
         #print( f"create_file: {folder_id} {file_name} {file_stat} {file_hash}")
         file = T_Files( folder_id = folder_id, file_name = file_name, length = file_stat.st_size,
                         ctime_ns = file_stat.st_ctime_ns, mtime_ns = file_stat.st_mtime_ns,
-                        ctime = datetime.fromtimestamp( file_stat.st_ctime_ns / 1e9, tz=timezone.utc),
-                        mtime = datetime.fromtimestamp( file_stat.st_mtime_ns / 1e9, tz=timezone.utc),
+                        ctime = datetime.fromtimestamp( file_stat.st_ctime_ns / 1e9, tz=UTC),
+                        mtime = datetime.fromtimestamp( file_stat.st_mtime_ns / 1e9, tz=UTC),
                         file_hash = file_hash)
         return file
 
@@ -249,8 +244,9 @@ class FilesDB( FilesDBBase):
         T_Ignores.__table__.drop( self.engine)
         T_Hosts.__table__.drop( self.engine)
 
-def _clean_up_ignored( file_db, session, host_id: int, ignores: List[str]) -> None:
-    ignore_starts = sorted( list( set( [file_db.ignored_to_startswith( ignore) for ignore in ignores])))
+def _clean_up_ignored( file_db, session, host_id: int, ignores: list[str]) -> None:
+    #ignore_starts = sorted( list( set( [file_db.ignored_to_startswith( ignore) for ignore in ignores])))
+    ignore_starts = sorted( { file_db.ignored_to_startswith( ignore) for ignore in ignores})
     for ignore_start in ignore_starts:
         #print( f"_clean_up_ignored: {ignore_start = } ")
         for folder in file_db.s_get_undeleted_folders( session, host_id, ignore_start, reverse=True):

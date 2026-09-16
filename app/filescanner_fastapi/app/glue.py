@@ -1,6 +1,6 @@
 import os
-from app.alchemyFilesDB import FilesDB
 
+from app.files_db import FilesDB
 
 files_db_name = "files_collector"
 tools_db_name = "object_detector"

@@ -5,18 +5,18 @@ Revises: e87545e70ade
 Create Date: 2026-09-12 17:07:50.601305
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from sqlalchemy.dialects import mysql
 
 from alembic import op
-import sqlalchemy as sa
-import migration_types
-from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = 'cf8b1f680090'
-down_revision: Union[str, Sequence[str], None] = 'e87545e70ade'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = 'e87545e70ade'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

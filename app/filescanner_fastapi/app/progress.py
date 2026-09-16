@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
-from typing import List
+
 import sqlalchemy
+
 
 class Progress:
 
@@ -14,7 +15,7 @@ class Progress:
         self.active_step = None
         #print( f"__init__ {self.column = } {self.action_id} {self.resolution} {self.steps} {self.ranges}")
 
-    def add_task( self, column: str, steps: int | None =None, resolution: int | None =None, ranges: List[int] | int | None =None) -> None:
+    def add_task( self, column: str, steps: int | None =None, resolution: int | None =None, ranges: list[int] | int | None =None) -> None:
         #print( f"add_task {column = } {steps = } {resolution = } {ranges = }")
         self.columns.append( column)
         #print( f"add_task {self.columns = }")

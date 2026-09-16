@@ -1,28 +1,25 @@
 # Module Imports
-import hashlib
 import os
-import pathlib
 import sys
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from enum import Enum
-from typing import List
-import sqlalchemy
 
-from fastapi import FastAPI, Query
+import sqlalchemy
+from fastapi import FastAPI
 from fastapi_pagination import Page, add_pagination  #, paginate
 from fastapi_pagination.ext.sqlalchemy import paginate  # as pag
 from fastapi_utilities import repeat_every
 from sqlalchemy.ext.automap import automap_base
 
-from app.alchemyModelFiles import Action, File, Folder, Host, Ignore, PutAction, PutHost, PutIgnore, T_Actions, T_Files, T_Folders, T_Hosts, T_Ignores
+from app.files_db import _clean_up_ignored
+from app.glue import file_db
+from app.model_files import Action, File, T_Actions, T_Files, T_Folders, T_Hosts, T_Ignores
 from app.progress import Progress
-from app.alchemyFilesDB import _clean_up_ignored
+from app.scan_hostfiles import check_for_new_or_updated_items, check_for_removed_items
 
-from app.glue import file_db, file_db_prod
-from app.scan_hostfiles import check_for_removed_items, check_for_new_or_updated_items
 from .api import create_new, delete_item, get_every, get_every_for_host, get_item, invalidate_item
-from .api.common import Tags, SortActionField, SortFileField, SortFolderField, SortIgnoreField, SortOrder
+from .api.common import Tags
+
 
 #@app.on_event("startup")
 @repeat_every(seconds=30, wait_first=True, raise_exceptions=True)
@@ -50,7 +47,7 @@ def check_for_pending_actions() -> None:
         progress.start_next()
         check_for_new_or_updated_items( file_db, container_subtree_to_check_path, scan_action.add_missing_sha, progress)
         #print(" check_for_new_or_updated_items: done", container_subtree_to_check_path, "with SHA" if scan_action.add_missing_sha else "")
-    assert invalidate_action_item( scan_action.id) == 1
+    assert invalidate_item.invalidate_action_item( scan_action.id) == 1
     b = datetime.now( tz=UTC)
     print("CHECK DONE", b-start)
 

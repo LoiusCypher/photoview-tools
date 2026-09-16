@@ -1,14 +1,9 @@
-import os
-import sys
-import hashlib
-import mariadb
-from datetime import datetime, timezone
-import sqlalchemy
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.dialects.mysql import INET4, INET6
-from typing import List, Optional, Union
-from pydantic import BaseModel, StrictInt, Field
+from datetime import datetime
+from typing import Union  #, list
 
+import sqlalchemy
+from pydantic import BaseModel, Field, StrictInt
+from sqlalchemy.dialects.mysql import INET4, INET6
 
 Base = sqlalchemy.orm.declarative_base()
 
@@ -17,8 +12,8 @@ Base = sqlalchemy.orm.declarative_base()
 class PutHost( BaseModel):
     name: str
     domain: str | None = None
-    ipv4: Optional[str]
-    ipv6: Optional[str]
+    ipv4: str | None
+    ipv6: str | None
 
 class Host( PutHost):
     id: StrictInt = Field( format='int64')
@@ -31,17 +26,17 @@ class T_Hosts(Base):
     id = sqlalchemy.Column( sqlalchemy.BigInteger(), primary_key=True)
     name = sqlalchemy.Column( sqlalchemy.String(length=64), nullable=False, unique=True)
     domain = sqlalchemy.Column( sqlalchemy.String(length=255))
-    ipv4 = sqlalchemy.Column( sqlalchemy.dialects.mysql.INET4())
-    ipv6 = sqlalchemy.Column( sqlalchemy.dialects.mysql.INET6())
+    ipv4 = sqlalchemy.Column( INET4())
+    ipv6 = sqlalchemy.Column( INET6())
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
                                     nullable=False, default=datetime.utcnow)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
                                     nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-    ignores: sqlalchemy.orm.Mapped[List["T_Ignores"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
+    ignores: sqlalchemy.orm.Mapped[list["T_Ignores"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
                                                                           cascade="all, delete", passive_deletes=True)
-    actions: sqlalchemy.orm.Mapped[List["T_Actions"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
+    actions: sqlalchemy.orm.Mapped[list["T_Actions"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
                                                                           cascade="all, delete", passive_deletes=True)
-    folders: sqlalchemy.orm.Mapped[List["T_Folders"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
+    folders: sqlalchemy.orm.Mapped[list["T_Folders"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
                                                                           cascade="all, delete", passive_deletes=True)
 
     def __repr__(self):
@@ -75,10 +70,10 @@ class T_Ignores(Base):
                f" created_at='{self.created_at}', modified_at='{self.updated_at}'>"
 
 class PutAction(BaseModel):
-    subtree: Optional[str]
-    for_removed: Optional[bool]
-    for_new_or_updated: Optional[bool]
-    add_missing_sha: Optional[bool]
+    subtree: str | None
+    for_removed: bool | None
+    for_new_or_updated: bool | None
+    add_missing_sha: bool | None
 
 class Action(PutAction):
     id: StrictInt = Field( format='int64')
@@ -87,10 +82,10 @@ class Action(PutAction):
     for_new_or_updated_progress: float =0.0
     add_missing_sha_progress: float =0.0
     created_at: datetime
-    started_at: Optional[datetime]
+    started_at: datetime | None
     updated_at: datetime
-    expected_at: Optional[datetime]
-    deleted_at: Optional[datetime]
+    expected_at: datetime | None
+    deleted_at: datetime | None
 
 class T_Actions(Base):
     __tablename__ = 'actions'
@@ -124,13 +119,13 @@ class T_Actions(Base):
 class Folder(BaseModel):
     id: StrictInt = Field( format='int64')
     host_id: StrictInt = Field( format='int64')
-    parent_id: Union[ None, int]
+    parent_id: None | int
     path: str
     path_hash: str
-    depth: Optional[int]
+    depth: int | None
     created_at: datetime
     updated_at: datetime
-    deleted_at: Optional[datetime]
+    deleted_at: datetime | None
 
 class T_Folders(Base):
     __tablename__ = 'folders'
@@ -150,10 +145,10 @@ class T_Folders(Base):
     host: sqlalchemy.orm.Mapped["T_Hosts"] = sqlalchemy.orm.relationship(back_populates="folders", single_parent=True,
                                                                           cascade="all, delete", passive_deletes=True)
     ##parent = sqlalchemy.orm.relationship( "T_Folders", remote_side=[id])
-    #parent: sqlalchemy.orm.Mapped[Optional["T_Folders"]] = sqlalchemy.orm.relationship( "T_Folders", single_parent=True, back_populates="childs", cascade="all, delete-orphan", remote_side=[id])
-    parent: sqlalchemy.orm.Mapped[Optional["T_Folders"]] = sqlalchemy.orm.relationship( "T_Folders", single_parent=True, cascade="all, delete-orphan", remote_side=[id])
-    childs: sqlalchemy.orm.Mapped[List["T_Folders"]] = sqlalchemy.orm.relationship( back_populates="parent")
-    files: sqlalchemy.orm.Mapped[List["T_Files"]] = sqlalchemy.orm.relationship(back_populates="folder")
+    #parent: sqlalchemy.orm.Mapped["T_Folders" | None] = sqlalchemy.orm.relationship( "T_Folders", single_parent=True, back_populates="childs", cascade="all, delete-orphan", remote_side=[id])
+    parent: sqlalchemy.orm.Mapped[Union["T_Folders", None]] = sqlalchemy.orm.relationship( "T_Folders", single_parent=True, cascade="all, delete-orphan", remote_side=[id])
+    childs: sqlalchemy.orm.Mapped[list["T_Folders"]] = sqlalchemy.orm.relationship( back_populates="parent")
+    files: sqlalchemy.orm.Mapped[list["T_Files"]] = sqlalchemy.orm.relationship(back_populates="folder")
 
     def __repr__(self):
         return f"<Folder(id='{self.id}', host_id='{self.host_id}', parent_id='{self.parent_id}', depth='{self.depth}', path='{self.path}', path_hash='{self.path_hash}'" \
@@ -168,10 +163,10 @@ class File(BaseModel):
     mtime_ns: StrictInt = Field( format='int64')
     ctime: datetime
     mtime: datetime
-    file_hash: Optional[str]
+    file_hash: str | None
     created_at: datetime
     updated_at: datetime
-    deleted_at: Optional[datetime]
+    deleted_at: datetime | None
 
 class T_Files(Base):
     __tablename__ = 'files'
