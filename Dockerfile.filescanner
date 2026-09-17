@@ -31,7 +31,7 @@ COPY app/filescanner_fastapi/pyproject.toml app/filescanner_fastapi/uv.lock /app
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-install-project --directory filescanner_fastapi --no-dev
 
 COPY app/filescanner_fastapi/app/* /app/filescanner_fastapi/app/
-COPY app/filescanner_fastapi/app/api/* /app/filescanner_fastapi/app/api/*
+COPY app/filescanner_fastapi/app/api/* /app/filescanner_fastapi/app/api/
 RUN uv sync --frozen --directory filescanner_fastapi --no-dev
 
 #CMD ["uv", "run", "python", "-m", "myapp", "--directory", "filescanner_fastapi"]
