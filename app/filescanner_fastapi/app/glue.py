@@ -13,5 +13,5 @@ assert curr_hostname is not None
 mariadb_conn = os.environ['MARIADB_CONN']
 #print(f"{mariadb_conn}")
 
-file_db_prod = FilesDB( curr_hostname, host_fs, mariadb_conn, 'db_files_prod')
+#file_db_prod = FilesDB( curr_hostname, host_fs, mariadb_conn, 'db_files_prod')
 file_db = FilesDB( curr_hostname, host_fs, mariadb_conn, 'db_files_dev')

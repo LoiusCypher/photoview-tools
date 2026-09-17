@@ -58,6 +58,7 @@ class FilesDB( FilesDBBase):
                 stmt = sqlalchemy.select(T_Hosts.id).where(T_Hosts.name==host_name)
                 self.host_id = session.scalar( stmt)
                 if self.host_id is None:
+                    #print( "Host not found:", host_name)
                     host = T_Hosts( name=host_name)
                     session.add( host)
                     session.commit()
@@ -65,6 +66,7 @@ class FilesDB( FilesDBBase):
                     self.host_id = host.id
             self.curr_host_name = host_name
 
+        #print( f"{host_name = } {root_in_container = } {mariadb_conn = } {db_name = }")
         super().__init__( mariadb_conn, db_name)
         Base.metadata.create_all( self.engine)
         self.root_in_container = root_in_container

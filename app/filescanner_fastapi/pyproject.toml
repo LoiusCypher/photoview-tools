@@ -23,6 +23,7 @@ dev = [
     "h5py>=3.16.0",
     "mariadb>=1.1.14",
     #"paramiko>=5.0.0",
+    "pytest>=9.1.1",
     "ruff>=0.16.7",
     "sqlalchemy>=2.0.52",
     "uv>=0.12.6",

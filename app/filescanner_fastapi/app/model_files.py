@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Union  #, list
 
 import sqlalchemy
+import sqlalchemy.orm
 from pydantic import BaseModel, Field, StrictInt
 from sqlalchemy.dialects.mysql import INET4, INET6
 
@@ -16,7 +17,7 @@ class PutHost( BaseModel):
     ipv6: str | None
 
 class Host( PutHost):
-    id: StrictInt = Field( format='int64')
+    id: StrictInt = Field( json_schema_extra={ "format": 'int64',})
     created_at: datetime
     updated_at: datetime
 
@@ -29,9 +30,10 @@ class T_Hosts(Base):
     ipv4 = sqlalchemy.Column( INET4())
     ipv6 = sqlalchemy.Column( INET6())
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP"),)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+                                    server_onupdate=sqlalchemy.FetchedValue(),)
     ignores: sqlalchemy.orm.Mapped[list["T_Ignores"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
                                                                           cascade="all, delete", passive_deletes=True)
     actions: sqlalchemy.orm.Mapped[list["T_Actions"]] = sqlalchemy.orm.relationship(back_populates="host", single_parent=True,
@@ -44,11 +46,11 @@ class T_Hosts(Base):
                f" created_at='{self.created_at}', modified_at='{self.updated_at}'>"
 
 class PutIgnore(BaseModel):
-    host_id: StrictInt = Field( format='int64')
+    host_id: StrictInt = Field( json_schema_extra={ "format": 'int64',})
     path_pattern: str
 
 class Ignore( PutIgnore):
-    id: StrictInt = Field( format='int64')
+    id: StrictInt = Field( json_schema_extra={ "format": 'int64',})
     created_at: datetime
     updated_at: datetime
 
@@ -59,9 +61,10 @@ class T_Ignores(Base):
     host_id = sqlalchemy.orm.mapped_column( sqlalchemy.ForeignKey("hosts.id", ondelete="CASCADE"))
     path_pattern = sqlalchemy.Column( sqlalchemy.String(length=750), nullable=False)
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP"),)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+                                    server_onupdate=sqlalchemy.FetchedValue(),)
 
     host: sqlalchemy.orm.Mapped["T_Hosts"] = sqlalchemy.orm.relationship(back_populates="ignores", cascade="all, delete-orphan",  single_parent=True,passive_deletes=True)
 
@@ -76,8 +79,8 @@ class PutAction(BaseModel):
     add_missing_sha: bool | None
 
 class Action(PutAction):
-    id: StrictInt = Field( format='int64')
-    host_id: StrictInt = Field( format='int64')
+    id: StrictInt = Field( json_schema_extra={ "format": 'int64',})
+    host_id: StrictInt = Field( json_schema_extra={ "format": 'int64',})
     for_removed_progress: float=0.0
     for_new_or_updated_progress: float =0.0
     add_missing_sha_progress: float =0.0
@@ -103,9 +106,10 @@ class T_Actions(Base):
     started_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
     expected_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP"),)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow) # datetime.now)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+                                    server_onupdate=sqlalchemy.FetchedValue(),)
     deleted_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
 
     host: sqlalchemy.orm.Mapped["T_Hosts"] = sqlalchemy.orm.relationship( back_populates="actions", single_parent=True,
@@ -117,8 +121,8 @@ class T_Actions(Base):
                f" created_at='{self.created_at}', updated_at='{self.updated_at}', deleted_at='{self.deleted_at}'>"
 
 class Folder(BaseModel):
-    id: StrictInt = Field( format='int64')
-    host_id: StrictInt = Field( format='int64')
+    id: StrictInt = Field( json_schema_extra={ "format": 'int64',})
+    host_id: StrictInt = Field( json_schema_extra={ "format": 'int64',})
     parent_id: None | int
     path: str
     path_hash: str
@@ -137,9 +141,10 @@ class T_Folders(Base):
     path_hash = sqlalchemy.Column( sqlalchemy.String(length=64).with_variant( sqlalchemy.dialects.mysql.CHAR(64), "mariadb"), nullable=False)
     depth = sqlalchemy.Column(sqlalchemy.Integer(), nullable=True)
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP"),)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+                                    server_onupdate=sqlalchemy.FetchedValue(),)
     deleted_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
 
     host: sqlalchemy.orm.Mapped["T_Hosts"] = sqlalchemy.orm.relationship(back_populates="folders", single_parent=True,
@@ -155,12 +160,12 @@ class T_Folders(Base):
                f" created_at='{self.created_at}', updated_at='{self.updated_at}', deleted_at='{self.deleted_at}'>"
 
 class File(BaseModel):
-    id: StrictInt = Field( format='int64')
-    folder_id: StrictInt = Field( format='int64')
+    id: StrictInt = Field( json_schema_extra={ "format": 'int64',})
+    folder_id: StrictInt = Field( json_schema_extra={ "format": 'int64',})
     file_name: str
-    length: StrictInt = Field( format='int64')
-    ctime_ns: StrictInt = Field( format='int64')
-    mtime_ns: StrictInt = Field( format='int64')
+    length: StrictInt = Field( json_schema_extra={ "format": 'int64',})
+    ctime_ns: StrictInt = Field( json_schema_extra={ "format": 'int64',})
+    mtime_ns: StrictInt = Field( json_schema_extra={ "format": 'int64',})
     ctime: datetime
     mtime: datetime
     file_hash: str | None
@@ -181,9 +186,10 @@ class T_Files(Base):
     mtime = sqlalchemy.Column(sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'), nullable=False)
     file_hash = sqlalchemy.Column(sqlalchemy.String(length=128).with_variant( sqlalchemy.dialects.mysql.CHAR(128), "mariadb"))
     created_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP"),)
     updated_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'),
-                                    nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+                                    nullable=False, server_default=sqlalchemy.text( "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
+                                    server_onupdate=sqlalchemy.FetchedValue(),)
     deleted_at = sqlalchemy.Column( sqlalchemy.DateTime().with_variant( sqlalchemy.dialects.mysql.DATETIME(fsp=3), 'mariadb'))
 
     folder: sqlalchemy.orm.Mapped["T_Folders"] = sqlalchemy.orm.relationship(back_populates="files", single_parent=True, cascade="all, delete-orphan")
