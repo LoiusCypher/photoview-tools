@@ -1,5 +1,4 @@
 [project]
-#name = "app"
 name = "filescanner_fastapi"
 version = "0.1.0"
 requires-python = ">=3.12"
@@ -13,6 +12,9 @@ dependencies = [
     "sqlalchemy>=2.0.52",
     "uv>=0.12.6",
 ]
+
+[tool.setuptools]
+py-modules = []
 
 [dependency-groups]
 dev = [

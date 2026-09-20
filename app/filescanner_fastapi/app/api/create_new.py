@@ -1,10 +1,10 @@
 import sqlalchemy
 from fastapi import APIRouter
 
-from app.files_db import _clean_up_ignored
 from app.model_files import PutAction, PutHost, PutIgnore, T_Actions, T_Hosts, T_Ignores
 
 from ..glue import file_db
+from .admin_tools import _clean_up_ignored
 from .common import Tags
 
 router = APIRouter()

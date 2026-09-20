@@ -2,12 +2,14 @@ from enum import Enum
 
 
 class Tags(Enum):
-    hosts = "Hosts"
-    actions = "Actions"
-    ignores = "Ignores"
-    folders = "Folders"
-    files = "Files"
-    current = "Current host"
+    current = "00 Current Host"
+    hosts   = "A1 Hosts"
+    actions = "A2 Actions"
+    ignores = "A3 Ignores"
+    folders = "A4 Folders"
+    files   = "A5 Files"
+    admin   = "B1 Admin Tools"
+    pathlist= "C1 Path Lists"
     develop = "Development"
 
 class SortOrder(str, Enum):

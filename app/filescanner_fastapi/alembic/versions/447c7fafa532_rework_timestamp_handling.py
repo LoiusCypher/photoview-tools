@@ -5,18 +5,18 @@ Revises: d5e5a3e277e5
 Create Date: 2026-09-18 01:37:01.295990
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from sqlalchemy.dialects import mysql
 
 from alembic import op
-import sqlalchemy as sa
-import migration_types
-from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = '447c7fafa532'
-down_revision: Union[str, Sequence[str], None] = 'd5e5a3e277e5'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = 'd5e5a3e277e5'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
